@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="CatalogAI Pro - AI-Powered Catalog Extraction System">
+    <title>CatalogAI Pro - Catalog Extraction</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>📦 CatalogAI Pro</h1>
+            <p class="subtitle">AI-Powered Catalog Extraction System</p>
+            <p class="version">v1.0.0</p>
+        </div>
+
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <span id="statusIndicator" class="status-dot"></span>
+            <span id="statusText">Initializing...</span>
+        </div>
+
+        <!-- Step 1: Upload -->
+        <div class="section">
+            <div class="step-number">Step 1</div>
+            <h2>Upload Catalog</h2>
+            <p class="step-description">
+                Select a PDF, DOCX, PPTX file or image containing your product catalog
+            </p>
+            
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-icon">📁</div>
+                <input 
+                    type="file" 
+                    id="fileInput" 
+                    accept=".pdf,.docx,.pptx,.jpg,.jpeg,.png,.webp"
+                    style="display: none;"
+                >
+                <label for="fileInput" class="upload-label">
+                    Click to select file or drag and drop
+                </label>
+                <p class="upload-hint">
+                    Supported: PDF, DOCX, PPTX, JPG, PNG
+                </p>
+            </div>
+            
+            <button class="btn btn-primary" id="uploadBtn" onclick="uploadFile()">
+                🚀 Upload & Process
+            </button>
+        </div>
+
+        <!-- Step 2: Progress -->
+        <div class="section" id="progressSection" style="display:none;">
+            <div class="step-number">Step 2</div>
+            <h2>Processing</h2>
+            <p class="step-description">
+                Your catalog is being processed. This may take a few minutes.
+            </p>
+            
+            <div class="progress-container">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressBar"></div>
+                </div>
+                <div class="progress-text">
+                    <span id="progressPercent">0%</span>
+                    <span id="progressDetails"> - Initializing...</span>
+                </div>
+            </div>
+            
+            <div class="processing-info">
+                <p><strong>Status:</strong> <span id="jobStatus">Initializing</span></p>
+                <p><strong>Products Processed:</strong> <span id="productsCount">0 / 0</span></p>
+                <p><strong>Estimated Cost:</strong> $<span id="estimatedCost">0.00</span></p>
+            </div>
+        </div>
+
+        <!-- Step 3: Results -->
+        <div class="section" id="resultsSection" style="display:none;">
+            <div class="step-number">Step 3</div>
+            <h2>Results</h2>
+            <p class="step-description">
+                Processing complete! Review and download your results.
+            </p>
+            
+            <div class="results-summary">
+                <div class="summary-item">
+                    <span class="summary-label">✅ Products Extracted:</span>
+                    <span id="finalProductCount" class="summary-value">0</span>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">💰 Total Cost:</span>
+                    <span id="finalCost" class="summary-value">$0.00</span>
+                </div>
+            </div>
+            
+            <div id="errorList" style="display:none;" class="error-section">
+                <h3>⚠️ Errors</h3>
+                <div id="errorItems"></div>
+            </div>
+            
+            <div class="button-group">
+                <button class="btn btn-primary" onclick="downloadExcel()">
+                    📊 Download Excel
+                </button>
+                <button class="btn btn-secondary" onclick="downloadCSV()">
+                    📋 Download CSV
+                </button>
+                <button class="btn btn-secondary" onclick="downloadJSON()">
+                    📄 Download JSON
+                </button>
+            </div>
+            
+            <button class="btn btn-secondary" onclick="startNew()">
+                🔄 Process Another File
+            </button>
+        </div>
+
+        <!-- Logs -->
+        <div class="section logs-section" id="logsSection" style="display:none;">
+            <h3>📝 Processing Logs</h3>
+            <div id="logsList" class="logs-list"></div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/config.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
