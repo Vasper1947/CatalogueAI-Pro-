@@ -1,132 +1,1118 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="CatalogAI Pro - AI-Powered Catalog Extraction System">
-    <title>CatalogAI Pro - Catalog Extraction</title>
-    <link rel="stylesheet" href="css/styles.css">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CatalogAI Pro — Building Materials Pipeline</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Segoe UI', Arial, sans-serif;
+  background: #eef2f7;
+  min-height: 100vh;
+  color: #222;
+}
+
+/* ── HEADER ── */
+header {
+  background: linear-gradient(135deg, #1a3a5c, #2980b9);
+  color: #fff;
+  padding: 16px 28px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.25);
+}
+header .logo { font-size: 26px; }
+header h1 { font-size: 20px; font-weight: 700; }
+header p { font-size: 12px; opacity: 0.8; }
+.backend-badge {
+  margin-left: auto;
+  padding: 5px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  background: rgba(255,255,255,0.15);
+}
+.backend-badge.online { background: rgba(39,174,96,0.35); }
+.backend-badge.offline { background: rgba(231,76,60,0.35); }
+
+/* ── STEPPER ── */
+.stepper-wrap {
+  background: white;
+  padding: 16px 28px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  overflow-x: auto;
+}
+.stepper {
+  display: flex;
+  align-items: center;
+  min-width: 700px;
+}
+.step-item {
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+.step-circle {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #d0d7de;
+  color: #666;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+  flex-shrink: 0;
+  transition: all 0.3s;
+}
+.step-label {
+  font-size: 11px;
+  color: #888;
+  margin-left: 8px;
+  white-space: nowrap;
+}
+.step-line { flex: 1; height: 2px; background: #d0d7de; margin: 0 8px; }
+.step-item.active .step-circle { background: #2980b9; color: #fff; }
+.step-item.done .step-circle { background: #27ae60; color: #fff; }
+.step-item.active .step-label { color: #2980b9; font-weight: 700; }
+.step-item.done .step-label { color: #27ae60; }
+.step-item.done .step-line { background: #27ae60; }
+
+/* ── MAIN ── */
+.main { max-width: 920px; margin: 28px auto; padding: 0 16px; }
+
+/* ── STATUS BAR ── */
+.status-bar {
+  padding: 13px 18px;
+  border-radius: 8px;
+  font-size: 14px;
+  margin-bottom: 20px;
+  border-left: 5px solid;
+  display: none;
+}
+.status-bar.show { display: block; }
+.status-bar.info    { background: #e8f4fd; border-color: #2980b9; color: #1a5276; }
+.status-bar.success { background: #eafaf1; border-color: #27ae60; color: #1e8449; }
+.status-bar.error   { background: #fdedec; border-color: #e74c3c; color: #922b21; }
+.status-bar.warning { background: #fef9e7; border-color: #f39c12; color: #7d6608; }
+
+/* ── CARD ── */
+.card {
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+  padding: 28px;
+  margin-bottom: 20px;
+  display: none;
+}
+.card.active { display: block; }
+.card h2 { font-size: 18px; color: #1a3a5c; margin-bottom: 5px; }
+.card .sub { font-size: 13px; color: #888; margin-bottom: 22px; }
+
+/* ── FORM ── */
+.field { margin-bottom: 18px; }
+.field label { display: block; font-size: 13px; font-weight: 600; color: #444; margin-bottom: 6px; }
+.field input[type=text], .field textarea {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1.5px solid #d0d7de;
+  border-radius: 7px;
+  font-size: 14px;
+  outline: none;
+  transition: border 0.2s;
+}
+.field input:focus, .field textarea:focus { border-color: #2980b9; }
+
+.tags-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px;
+  border: 1.5px solid #d0d7de;
+  border-radius: 7px;
+  min-height: 44px;
+  cursor: text;
+  align-items: center;
+}
+.tags-wrap:focus-within { border-color: #2980b9; }
+.tag {
+  background: #d6e4f7;
+  color: #1a3a5c;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tag-remove { cursor: pointer; font-weight: bold; color: #666; }
+.tag-remove:hover { color: #e74c3c; }
+.tag-input {
+  border: none;
+  outline: none;
+  font-size: 13px;
+  min-width: 100px;
+  background: transparent;
+}
+
+/* ── DROP ZONE ── */
+.drop-zone {
+  border: 2px dashed #2980b9;
+  border-radius: 10px;
+  padding: 42px 24px;
+  text-align: center;
+  cursor: pointer;
+  background: #f7fbff;
+  transition: all 0.25s;
+}
+.drop-zone:hover, .drop-zone.over { background: #e5f0fb; border-color: #1a3a5c; }
+.drop-zone .dz-icon { font-size: 44px; margin-bottom: 10px; }
+.drop-zone p { color: #555; font-size: 14px; }
+.drop-zone small { color: #999; font-size: 12px; }
+.file-info {
+  margin-top: 14px;
+  padding: 10px 14px;
+  background: #eafaf1;
+  border-radius: 7px;
+  font-size: 13px;
+  color: #1e8449;
+  display: none;
+}
+.file-info.show { display: block; }
+
+/* ── PROGRESS ── */
+.progress-wrap { margin: 18px 0; }
+.progress-top { display: flex; justify-content: space-between; font-size: 13px; color: #555; margin-bottom: 6px; }
+.progress-bar { height: 10px; background: #e0e8f0; border-radius: 5px; overflow: hidden; }
+.progress-fill { height: 100%; background: linear-gradient(90deg, #2980b9, #27ae60); width: 0%; border-radius: 5px; transition: width 0.4s; }
+.phase-label { font-size: 13px; color: #2980b9; font-weight: 600; margin-top: 8px; min-height: 20px; }
+
+/* ── BUTTONS ── */
+.btn {
+  padding: 11px 22px;
+  border: none;
+  border-radius: 7px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary { background: #2980b9; color: #fff; }
+.btn-primary:hover:not(:disabled) { background: #1a3a5c; }
+.btn-success { background: #27ae60; color: #fff; }
+.btn-success:hover:not(:disabled) { background: #1e8449; }
+.btn-warning { background: #f39c12; color: #fff; }
+.btn-danger  { background: #e74c3c; color: #fff; }
+.btn-gray    { background: #95a5a6; color: #fff; }
+.btn-group   { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 20px; }
+
+/* ── IMAGES GRID ── */
+.grid-controls {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.summary-badge {
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.sb-total    { background: #e8f4fd; color: #1a3a5c; }
+.sb-approved { background: #eafaf1; color: #1e8449; }
+.sb-rejected { background: #fdedec; color: #922b21; }
+
+.images-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 14px;
+  max-height: 520px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.img-card {
+  border: 2px solid #e0e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+  transition: all 0.2s;
+  background: white;
+}
+.img-card.approved { border-color: #27ae60; }
+.img-card.rejected { border-color: #e74c3c; opacity: 0.5; }
+.img-thumb {
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+  display: block;
+  background: #f0f4f8;
+}
+.img-body { padding: 8px; }
+.img-sku-label { font-size: 10px; color: #888; margin-bottom: 3px; }
+.img-sku-input {
+  width: 100%;
+  padding: 4px 7px;
+  border: 1px solid #d0d7de;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #1a3a5c;
+}
+.img-fname { font-size: 10px; color: #aaa; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.img-actions { display: flex; gap: 4px; padding: 0 8px 8px; }
+.img-actions button {
+  flex: 1; padding: 4px 0; border: none; border-radius: 4px;
+  font-size: 11px; font-weight: 700; cursor: pointer;
+}
+.btn-approve-img { background: #eafaf1; color: #27ae60; }
+.btn-reject-img  { background: #fdedec; color: #e74c3c; }
+.btn-approve-img:hover { background: #27ae60; color: #fff; }
+.btn-reject-img:hover  { background: #e74c3c; color: #fff; }
+
+/* ── DRIVE SECTION ── */
+.drive-info {
+  padding: 16px;
+  background: #f7fbff;
+  border-radius: 8px;
+  margin-bottom: 14px;
+  font-size: 14px;
+}
+.drive-info a { color: #2980b9; }
+
+/* ── FLAGGED ITEMS ── */
+.flagged-list { margin-top: 14px; }
+.flagged-item {
+  padding: 10px 14px;
+  background: #fef9e7;
+  border-left: 4px solid #f39c12;
+  border-radius: 5px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+.flagged-item strong { color: #7d6608; }
+
+/* ── VALIDATION ── */
+.validation-report { margin-top: 14px; }
+.v-issue {
+  padding: 8px 14px;
+  background: #fdedec;
+  border-radius: 5px;
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: #922b21;
+}
+.v-pass {
+  padding: 14px;
+  background: #eafaf1;
+  border-radius: 8px;
+  color: #1e8449;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+/* ── RESULT BOXES ── */
+.result-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+.result-box {
+  padding: 18px;
+  background: #f7fbff;
+  border-radius: 8px;
+  text-align: center;
+}
+.result-box .big { font-size: 36px; font-weight: 800; color: #1a3a5c; }
+.result-box .lbl { font-size: 12px; color: #888; margin-top: 5px; }
+
+.download-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 26px;
+  background: linear-gradient(135deg, #27ae60, #1e8449);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-right: 10px;
+  margin-bottom: 10px;
+  text-decoration: none;
+  transition: all 0.25s;
+}
+.download-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(39,174,96,0.3); }
+.download-btn.secondary { background: linear-gradient(135deg, #2980b9, #1a3a5c); }
+
+/* ── RESPONSIVE ── */
+@media (max-width: 500px) {
+  .step-label { display: none; }
+  .result-grid { grid-template-columns: 1fr 1fr; }
+  header h1 { font-size: 16px; }
+}
+</style>
 </head>
 <body>
-    <div class="container">
-        <!-- Header -->
-        <div class="header">
-            <h1>📦 CatalogAI Pro</h1>
-            <p class="subtitle">AI-Powered Catalog Extraction System</p>
-            <p class="version">v1.0.0</p>
-        </div>
 
-        <!-- Status Bar -->
-        <div class="status-bar">
-            <span id="statusIndicator" class="status-dot"></span>
-            <span id="statusText">Initializing...</span>
-        </div>
+<!-- HEADER -->
+<header>
+  <div class="logo">🏗️</div>
+  <div>
+    <h1>CatalogAI Pro</h1>
+    <p>Building Materials Catalog Processing Pipeline</p>
+  </div>
+  <span class="backend-badge" id="backendBadge">Connecting...</span>
+</header>
 
-        <!-- Step 1: Upload -->
-        <div class="section">
-            <div class="step-number">Step 1</div>
-            <h2>Upload Catalog</h2>
-            <p class="step-description">
-                Select a PDF, DOCX, PPTX file or image containing your product catalog
-            </p>
-            
-            <div class="upload-area" id="uploadArea">
-                <div class="upload-icon">📁</div>
-                <input 
-                    type="file" 
-                    id="fileInput" 
-                    accept=".pdf,.docx,.pptx,.jpg,.jpeg,.png,.webp"
-                    style="display: none;"
-                >
-                <label for="fileInput" class="upload-label">
-                    Click to select file or drag and drop
-                </label>
-                <p class="upload-hint">
-                    Supported: PDF, DOCX, PPTX, JPG, PNG
-                </p>
-            </div>
-            
-            <button class="btn btn-primary" id="uploadBtn" onclick="uploadFile()">
-                🚀 Upload & Process
-            </button>
-        </div>
+<!-- STEPPER -->
+<div class="stepper-wrap">
+  <div class="stepper">
+    <div class="step-item active" id="stp1">
+      <div class="step-circle">1</div>
+      <div class="step-label">Upload</div>
+    </div>
+    <div class="step-line" id="sl1"></div>
+    <div class="step-item" id="stp2">
+      <div class="step-circle">2</div>
+      <div class="step-label">Extract</div>
+    </div>
+    <div class="step-line" id="sl2"></div>
+    <div class="step-item" id="stp3">
+      <div class="step-circle">3</div>
+      <div class="step-label">Review</div>
+    </div>
+    <div class="step-line" id="sl3"></div>
+    <div class="step-item" id="stp4">
+      <div class="step-circle">4</div>
+      <div class="step-label">Drive Upload</div>
+    </div>
+    <div class="step-line" id="sl4"></div>
+    <div class="step-item" id="stp5">
+      <div class="step-circle">5</div>
+      <div class="step-label">Attributes</div>
+    </div>
+    <div class="step-line" id="sl5"></div>
+    <div class="step-item" id="stp6">
+      <div class="step-circle">6</div>
+      <div class="step-label">Template</div>
+    </div>
+    <div class="step-line" id="sl6"></div>
+    <div class="step-item" id="stp7">
+      <div class="step-circle">7</div>
+      <div class="step-label">Generate</div>
+    </div>
+    <div class="step-line" id="sl7"></div>
+    <div class="step-item" id="stp8">
+      <div class="step-circle">8</div>
+      <div class="step-label">Download</div>
+    </div>
+  </div>
+</div>
 
-        <!-- Step 2: Progress -->
-        <div class="section" id="progressSection" style="display:none;">
-            <div class="step-number">Step 2</div>
-            <h2>Processing</h2>
-            <p class="step-description">
-                Your catalog is being processed. This may take a few minutes.
-            </p>
-            
-            <div class="progress-container">
-                <div class="progress-bar">
-                    <div class="progress-fill" id="progressBar"></div>
-                </div>
-                <div class="progress-text">
-                    <span id="progressPercent">0%</span>
-                    <span id="progressDetails"> - Initializing...</span>
-                </div>
-            </div>
-            
-            <div class="processing-info">
-                <p><strong>Status:</strong> <span id="jobStatus">Initializing</span></p>
-                <p><strong>Products Processed:</strong> <span id="productsCount">0 / 0</span></p>
-                <p><strong>Estimated Cost:</strong> $<span id="estimatedCost">0.00</span></p>
-            </div>
-        </div>
+<!-- MAIN -->
+<div class="main">
 
-        <!-- Step 3: Results -->
-        <div class="section" id="resultsSection" style="display:none;">
-            <div class="step-number">Step 3</div>
-            <h2>Results</h2>
-            <p class="step-description">
-                Processing complete! Review and download your results.
-            </p>
-            
-            <div class="results-summary">
-                <div class="summary-item">
-                    <span class="summary-label">✅ Products Extracted:</span>
-                    <span id="finalProductCount" class="summary-value">0</span>
-                </div>
-                <div class="summary-item">
-                    <span class="summary-label">💰 Total Cost:</span>
-                    <span id="finalCost" class="summary-value">$0.00</span>
-                </div>
-            </div>
-            
-            <div id="errorList" style="display:none;" class="error-section">
-                <h3>⚠️ Errors</h3>
-                <div id="errorItems"></div>
-            </div>
-            
-            <div class="button-group">
-                <button class="btn btn-primary" onclick="downloadExcel()">
-                    📊 Download Excel
-                </button>
-                <button class="btn btn-secondary" onclick="downloadCSV()">
-                    📋 Download CSV
-                </button>
-                <button class="btn btn-secondary" onclick="downloadJSON()">
-                    📄 Download JSON
-                </button>
-            </div>
-            
-            <button class="btn btn-secondary" onclick="startNew()">
-                🔄 Process Another File
-            </button>
-        </div>
+  <!-- Global Status -->
+  <div class="status-bar info show" id="statusBar">Checking backend connection...</div>
 
-        <!-- Logs -->
-        <div class="section logs-section" id="logsSection" style="display:none;">
-            <h3>📝 Processing Logs</h3>
-            <div id="logsList" class="logs-list"></div>
-        </div>
+  <!-- ══ PHASE 1: UPLOAD ══ -->
+  <div class="card active" id="ph1">
+    <h2>📁 Phase 1 — Upload Catalog</h2>
+    <p class="sub">Upload your supplier catalog file, enter brand name and product categories</p>
+
+    <div class="drop-zone" id="dropZone">
+      <div class="dz-icon">📄</div>
+      <p><strong>Click to select file or drag & drop</strong></p>
+      <small>Supported: PDF, DOCX &nbsp;|&nbsp; Max 500MB</small>
+      <input type="file" id="fileInput" accept=".pdf,.docx,.doc" style="display:none">
+    </div>
+    <div class="file-info" id="fileInfo"></div>
+
+    <div class="field" style="margin-top:20px;">
+      <label>Brand Name *</label>
+      <input type="text" id="brandInput" placeholder="e.g. Goodwill, Virony, Eagle Ace England" />
     </div>
 
-    <!-- Scripts -->
-    <script src="js/config.js"></script>
-    <script src="js/api.js"></script>
-    <script src="js/app.js"></script>
+    <div class="field">
+      <label>Product Categories * <small style="font-weight:400;color:#999">(type and press Enter to add)</small></label>
+      <div class="tags-wrap" id="tagsWrap">
+        <input class="tag-input" id="tagInput" placeholder="e.g. Ceramic Tiles" />
+      </div>
+    </div>
+
+    <div class="btn-group">
+      <button class="btn btn-primary" id="startBtn" onclick="startPipeline()" disabled>
+        🚀 Start Processing
+      </button>
+    </div>
+  </div>
+
+  <!-- ══ PHASE 2: EXTRACTION ══ -->
+  <div class="card" id="ph2">
+    <h2>⚙️ Phase 2 — Extracting Images & Detecting SKUs</h2>
+    <p class="sub">Extracting all images from document. Claude AI reads each image for SKU codes and dimensions.</p>
+
+    <div class="progress-wrap">
+      <div class="progress-top">
+        <span id="progLabel">Initializing...</span>
+        <span id="progPct">0%</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="progFill"></div></div>
+    </div>
+    <div class="phase-label" id="phaseLabel">Starting extraction...</div>
+    <div style="font-size:13px;color:#555;margin-top:10px;">
+      Images found: <strong id="imgCount">0</strong>
+    </div>
+  </div>
+
+  <!-- ══ PHASE 3: HUMAN REVIEW ══ -->
+  <div class="card" id="ph3">
+    <h2>🔍 Phase 3 — Human Review Checkpoint</h2>
+    <p class="sub">Inspect every image. Edit SKU if needed. Approve or reject. Only approved images proceed to Drive.</p>
+
+    <div class="grid-controls">
+      <span class="summary-badge sb-total">Total: <span id="totalCnt">0</span></span>
+      <span class="summary-badge sb-approved">✅ Approved: <span id="appCnt">0</span></span>
+      <span class="summary-badge sb-rejected">❌ Rejected: <span id="rejCnt">0</span></span>
+      <button class="btn btn-success" style="padding:6px 14px;font-size:12px;" onclick="approveAll()">✅ Approve All</button>
+      <button class="btn btn-danger"  style="padding:6px 14px;font-size:12px;" onclick="rejectAll()">❌ Reject All</button>
+    </div>
+
+    <div class="images-grid" id="imagesGrid"></div>
+
+    <div class="btn-group">
+      <button class="btn btn-primary" id="confirmBtn" onclick="confirmApproval()" disabled>
+        ✅ Confirm Approved — Proceed to Drive Upload
+      </button>
+    </div>
+  </div>
+
+  <!-- ══ PHASE 4: DRIVE UPLOAD ══ -->
+  <div class="card" id="ph4">
+    <h2>☁️ Phase 4 — Google Drive Upload</h2>
+    <p class="sub">Uploading approved images to Google Drive. Getting real shareable links for each image.</p>
+
+    <div class="progress-wrap">
+      <div class="progress-top">
+        <span id="driveLabel">Uploading...</span>
+        <span id="drivePct"></span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="driveFill"></div></div>
+    </div>
+    <div class="phase-label" id="drivePhase"></div>
+
+    <div class="drive-info" id="driveResult" style="display:none">
+      <div>✅ <strong id="driveCount">0</strong> images uploaded to Google Drive</div>
+      <div style="margin-top:8px;">📁 <a id="driveFolderLink" href="#" target="_blank">Open Drive Folder</a></div>
+      <div style="margin-top:8px;">📄 <strong id="linksCount">0</strong> unique links generated</div>
+    </div>
+
+    <div class="btn-group" id="driveDownloadBtns" style="display:none">
+      <button class="btn btn-gray" onclick="downloadFile('txt')">⬇️ Download SKU Links TXT</button>
+      <button class="btn btn-gray" onclick="downloadFile('csv')">⬇️ Download SKU Links CSV</button>
+    </div>
+
+    <div class="btn-group" id="driveNextBtn" style="display:none">
+      <button class="btn btn-primary" onclick="goToPhase(5); triggerAttributeExtraction()">
+        ➡️ Proceed to Attribute Extraction
+      </button>
+    </div>
+  </div>
+
+  <!-- ══ PHASE 5: ATTRIBUTES ══ -->
+  <div class="card" id="ph5">
+    <h2>🧠 Phase 5 — Product Attribute Extraction</h2>
+    <p class="sub">Claude Vision reads each approved image and extracts all product attributes. Descriptions are generated.</p>
+
+    <div class="progress-wrap">
+      <div class="progress-top">
+        <span id="attrLabel">Processing images...</span>
+        <span id="attrPct">0%</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="attrFill"></div></div>
+    </div>
+    <div class="phase-label" id="attrPhase">Starting attribute extraction...</div>
+
+    <div id="flaggedSection" style="display:none">
+      <h3 style="font-size:15px;color:#f39c12;margin:16px 0 10px;">⚠️ Items Needing Clarification:</h3>
+      <div class="flagged-list" id="flaggedList"></div>
+    </div>
+
+    <div class="btn-group" id="attrNextBtn" style="display:none">
+      <button class="btn btn-primary" onclick="goToPhase(6)">
+        ➡️ Upload Excel Template
+      </button>
+    </div>
+  </div>
+
+  <!-- ══ PHASE 6: TEMPLATE ══ -->
+  <div class="card" id="ph6">
+    <h2>📋 Phase 6 — Upload Excel Template</h2>
+    <p class="sub">Upload the Excel template that will be filled with all product data.</p>
+
+    <div class="drop-zone" id="tmplDropZone">
+      <div class="dz-icon">📊</div>
+      <p><strong>Click to select Excel template</strong></p>
+      <small>Supported: .xlsx, .xlsm</small>
+      <input type="file" id="tmplInput" accept=".xlsx,.xlsm" style="display:none">
+    </div>
+    <div class="file-info" id="tmplInfo"></div>
+
+    <div class="btn-group">
+      <button class="btn btn-primary" id="tmplBtn" onclick="uploadTemplate()" disabled>
+        📤 Upload Template & Generate Excel
+      </button>
+    </div>
+  </div>
+
+  <!-- ══ PHASE 7: GENERATE ══ -->
+  <div class="card" id="ph7">
+    <h2>📊 Phase 7 — Generating Excel File</h2>
+    <p class="sub">Filling your template with SKUs, Drive links, attributes, dimensions, descriptions and tags.</p>
+
+    <div class="progress-wrap">
+      <div class="progress-top">
+        <span id="genLabel">Generating...</span>
+        <span id="genPct"></span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="genFill"></div></div>
+    </div>
+    <div class="phase-label" id="genPhase">Building Excel rows...</div>
+
+    <div id="validationSection" style="display:none; margin-top:20px;">
+      <h3 style="font-size:15px;color:#1a3a5c;margin-bottom:12px;">🔍 Validation Report:</h3>
+      <div class="validation-report" id="validationReport"></div>
+    </div>
+
+    <div class="btn-group" id="genNextBtn" style="display:none">
+      <button class="btn btn-primary" onclick="goToPhase(8)">
+        ➡️ Download Final Files
+      </button>
+    </div>
+  </div>
+
+  <!-- ══ PHASE 8: DOWNLOAD ══ -->
+  <div class="card" id="ph8">
+    <h2>✅ Phase 8 — All Done! Download Your Files</h2>
+    <p class="sub">Your catalog has been fully processed. Download your files below.</p>
+
+    <div class="result-grid">
+      <div class="result-box">
+        <div class="big" id="r_total">0</div>
+        <div class="lbl">Images Extracted</div>
+      </div>
+      <div class="result-box">
+        <div class="big" id="r_approved">0</div>
+        <div class="lbl">Approved Products</div>
+      </div>
+      <div class="result-box">
+        <div class="big" id="r_drive">0</div>
+        <div class="lbl">Drive Links</div>
+      </div>
+      <div class="result-box">
+        <div class="big" id="r_rows">0</div>
+        <div class="lbl">Excel Rows Filled</div>
+      </div>
+    </div>
+
+    <div>
+      <button class="download-btn" onclick="downloadFile('excel')">⬇️ Download Final Excel</button>
+      <button class="download-btn secondary" onclick="downloadFile('txt')">⬇️ Download SKU Links TXT</button>
+      <button class="download-btn secondary" onclick="downloadFile('csv')">⬇️ Download SKU Links CSV</button>
+      <button class="download-btn secondary" onclick="downloadFile('metadata')">⬇️ Download Metadata JSON</button>
+    </div>
+
+    <div class="btn-group" style="margin-top:24px;">
+      <button class="btn btn-gray" onclick="resetAll()">🔄 Process Another Catalog</button>
+    </div>
+  </div>
+
+</div><!-- /main -->
+
+<script>
+const BACKEND = "https://catalogai-pro.fly.dev";
+let jobId = null;
+let allImages = [];
+let imageStates = {};
+let pollTimer = null;
+let categories = [];
+let approvedImages = [];
+let driveLinksCount = 0;
+
+// ── INIT ─────────────────────────────────────────────────────────────────────
+window.addEventListener('load', async () => {
+  try {
+    const r = await fetch(`${BACKEND}/health`);
+    const d = await r.json();
+    if (d.status === 'ok') {
+      setBadge('✅ Backend Online', 'online');
+      showStatus(`Backend connected. Drive: ${d.drive}. Ready to process catalogs.`, 'success');
+      setTimeout(() => document.getElementById('statusBar').classList.remove('show'), 4000);
+    }
+  } catch {
+    setBadge('❌ Offline', 'offline');
+    showStatus('Cannot connect to backend. Check your internet connection.', 'error');
+  }
+});
+
+// ── FILE UPLOAD ZONE ─────────────────────────────────────────────────────────
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('over'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('over'); handleFile(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change', () => handleFile(fileInput.files[0]));
+
+function handleFile(file) {
+  if (!file) return;
+  window._catalogFile = file;
+  const fi = document.getElementById('fileInfo');
+  fi.innerHTML = `✅ <strong>${file.name}</strong> — ${(file.size/1024/1024).toFixed(2)} MB`;
+  fi.classList.add('show');
+  checkStartReady();
+}
+
+// ── CATEGORY TAGS ─────────────────────────────────────────────────────────────
+const tagInput = document.getElementById('tagInput');
+tagInput.addEventListener('keydown', e => {
+  if ((e.key === 'Enter' || e.key === ',') && tagInput.value.trim()) {
+    e.preventDefault();
+    addTag(tagInput.value.trim());
+    tagInput.value = '';
+  }
+});
+document.getElementById('tagsWrap').addEventListener('click', () => tagInput.focus());
+
+function addTag(val) {
+  if (categories.includes(val)) return;
+  categories.push(val);
+  const tag = document.createElement('div');
+  tag.className = 'tag';
+  tag.innerHTML = `${val}<span class="tag-remove" onclick="removeTag('${val}',this)">×</span>`;
+  tag.dataset.val = val;
+  document.getElementById('tagsWrap').insertBefore(tag, tagInput);
+  checkStartReady();
+}
+
+function removeTag(val, el) {
+  categories = categories.filter(c => c !== val);
+  el.parentElement.remove();
+  checkStartReady();
+}
+
+document.getElementById('brandInput').addEventListener('input', checkStartReady);
+
+function checkStartReady() {
+  const brand = document.getElementById('brandInput').value.trim();
+  const hasFile = !!window._catalogFile;
+  const hasCats = categories.length > 0;
+  document.getElementById('startBtn').disabled = !(brand && hasFile && hasCats);
+}
+
+// ── PIPELINE START ────────────────────────────────────────────────────────────
+async function startPipeline() {
+  const brand = document.getElementById('brandInput').value.trim();
+  if (!brand || !window._catalogFile || categories.length === 0) return;
+  document.getElementById('startBtn').disabled = true;
+  showStatus('Creating job...', 'info');
+  try {
+    // Create job
+    const r1 = await fetch(`${BACKEND}/api/jobs`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ brand, categories })
+    });
+    const j1 = await r1.json();
+    if (!r1.ok) throw new Error(j1.detail || 'Job creation failed');
+    jobId = j1.job_id;
+    showStatus(`Job created: ${jobId}. Uploading file...`, 'info');
+
+    // Upload file
+    const form = new FormData();
+    form.append('file', window._catalogFile);
+    const r2 = await fetch(`${BACKEND}/api/jobs/${jobId}/upload`, { method: 'POST', body: form });
+    const j2 = await r2.json();
+    if (!r2.ok) throw new Error(j2.detail || 'Upload failed');
+
+    showStatus('File uploaded. Extracting images and detecting SKUs...', 'info');
+    goToPhase(2);
+    pollExtraction();
+
+  } catch (err) {
+    showStatus('Error: ' + err.message, 'error');
+    document.getElementById('startBtn').disabled = false;
+  }
+}
+
+// ── POLL EXTRACTION ───────────────────────────────────────────────────────────
+function pollExtraction() {
+  const phaseLabels = {
+    'extracting_images': 'Extracting images from document...',
+    'detecting_skus': 'Claude AI reading SKU codes and dimensions...',
+    'awaiting_review': 'Extraction complete!',
+    'error': 'An error occurred'
+  };
+  pollTimer = setInterval(async () => {
+    try {
+      const r = await fetch(`${BACKEND}/api/jobs/${jobId}/progress`);
+      const d = await r.json();
+      setProgress('progFill', 'progPct', 'progLabel', d.progress, phaseLabels[d.phase] || d.phase);
+      document.getElementById('imgCount').textContent = d.images_extracted || 0;
+      document.getElementById('phaseLabel').textContent = phaseLabels[d.phase] || d.phase;
+
+      if (d.status === 'awaiting_review') {
+        clearInterval(pollTimer);
+        await loadImages();
+      } else if (d.status === 'error') {
+        clearInterval(pollTimer);
+        showStatus('Extraction error: ' + d.error, 'error');
+      }
+    } catch (err) {
+      clearInterval(pollTimer);
+      showStatus('Connection error: ' + err.message, 'error');
+    }
+  }, 2000);
+}
+
+// ── LOAD IMAGES FOR REVIEW ────────────────────────────────────────────────────
+async function loadImages() {
+  const r = await fetch(`${BACKEND}/api/jobs/${jobId}/images`);
+  const d = await r.json();
+  allImages = d.images || [];
+  imageStates = {};
+  allImages.forEach(img => { imageStates[img.index] = 'approved'; });
+  renderGrid();
+  goToPhase(3);
+  showStatus(`${allImages.length} images extracted and SKUs detected. Review below.`, 'success');
+}
+
+function renderGrid() {
+  const grid = document.getElementById('imagesGrid');
+  grid.innerHTML = '';
+  let ap = 0, rj = 0;
+  allImages.forEach(img => {
+    const st = imageStates[img.index] || 'approved';
+    if (st === 'approved') ap++; else rj++;
+    const div = document.createElement('div');
+    div.className = `img-card ${st}`;
+    div.id = `ic_${img.index}`;
+    div.innerHTML = `
+      <img class="img-thumb" src="${BACKEND}/api/jobs/${jobId}/image/${img.filename}"
+           onerror="this.style.background='#e0e8f0';this.alt='No preview'" alt="${img.sku}" />
+      <div class="img-body">
+        <div class="img-sku-label">SKU</div>
+        <input class="img-sku-input" id="sku_${img.index}" value="${img.sku}"
+               onchange="updateSku(${img.index}, this.value)" />
+        <div class="img-fname">${img.filename}</div>
+      </div>
+      <div class="img-actions">
+        <button class="btn-approve-img" onclick="setState(${img.index},'approved')">✅ OK</button>
+        <button class="btn-reject-img"  onclick="setState(${img.index},'rejected')">❌ Skip</button>
+      </div>`;
+    grid.appendChild(div);
+  });
+  document.getElementById('totalCnt').textContent = allImages.length;
+  document.getElementById('appCnt').textContent = ap;
+  document.getElementById('rejCnt').textContent = rj;
+  document.getElementById('confirmBtn').disabled = ap === 0;
+}
+
+function setState(idx, state) {
+  imageStates[idx] = state;
+  const card = document.getElementById(`ic_${idx}`);
+  card.className = `img-card ${state}`;
+  updateCounts();
+}
+
+function updateSku(idx, val) {
+  const img = allImages.find(i => i.index === idx);
+  if (img) img.sku = val;
+}
+
+function updateCounts() {
+  let ap = 0, rj = 0;
+  Object.values(imageStates).forEach(s => s === 'approved' ? ap++ : rj++);
+  document.getElementById('appCnt').textContent = ap;
+  document.getElementById('rejCnt').textContent = rj;
+  document.getElementById('confirmBtn').disabled = ap === 0;
+}
+
+function approveAll() { allImages.forEach(i => setState(i.index, 'approved')); }
+function rejectAll()  { allImages.forEach(i => setState(i.index, 'rejected')); }
+
+// ── CONFIRM APPROVAL ──────────────────────────────────────────────────────────
+async function confirmApproval() {
+  approvedImages = allImages
+    .filter(img => imageStates[img.index] === 'approved')
+    .map(img => ({
+      ...img,
+      sku: document.getElementById(`sku_${img.index}`)?.value || img.sku
+    }));
+
+  if (approvedImages.length === 0) return showStatus('Please approve at least one image.', 'warning');
+
+  document.getElementById('confirmBtn').disabled = true;
+  showStatus('Saving approved list...', 'info');
+  try {
+    const r = await fetch(`${BACKEND}/api/jobs/${jobId}/approve`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ approved_images: approvedImages })
+    });
+    if (!r.ok) throw new Error('Approval failed');
+    goToPhase(4);
+    showStatus(`${approvedImages.length} images approved. Starting Drive upload...`, 'info');
+    triggerDriveUpload();
+  } catch (err) {
+    showStatus('Error: ' + err.message, 'error');
+    document.getElementById('confirmBtn').disabled = false;
+  }
+}
+
+// ── DRIVE UPLOAD ──────────────────────────────────────────────────────────────
+async function triggerDriveUpload() {
+  document.getElementById('driveLabel').textContent = 'Uploading to Google Drive...';
+  document.getElementById('driveFill').style.width = '30%';
+  document.getElementById('drivePhase').textContent = 'Authenticating with Google Drive...';
+
+  try {
+    const r = await fetch(`${BACKEND}/api/jobs/${jobId}/upload_to_drive`, { method: 'POST' });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || 'Drive upload failed');
+
+    driveLinksCount = d.links_count || 0;
+    document.getElementById('driveFill').style.width = '100%';
+    document.getElementById('driveLabel').textContent = 'Upload complete!';
+    document.getElementById('drivePhase').textContent = d.message;
+
+    document.getElementById('driveCount').textContent = d.uploaded;
+    document.getElementById('linksCount').textContent = d.links_count;
+    document.getElementById('driveFolderLink').href = d.drive_folder;
+    document.getElementById('driveResult').style.display = 'block';
+    document.getElementById('driveDownloadBtns').style.display = 'flex';
+    document.getElementById('driveNextBtn').style.display = 'flex';
+
+    showStatus(`✅ ${d.uploaded} images uploaded to Drive. ${d.links_count} real links generated.`, 'success');
+  } catch (err) {
+    showStatus('Drive upload error: ' + err.message, 'error');
+    document.getElementById('driveLabel').textContent = 'Upload failed';
+  }
+}
+
+// ── ATTRIBUTE EXTRACTION ──────────────────────────────────────────────────────
+async function triggerAttributeExtraction() {
+  showStatus('Starting attribute extraction with Claude Vision...', 'info');
+  document.getElementById('attrFill').style.width = '5%';
+
+  try {
+    const r = await fetch(`${BACKEND}/api/jobs/${jobId}/extract_attributes`, { method: 'POST' });
+    if (!r.ok) throw new Error('Failed to start extraction');
+    pollAttributes();
+  } catch (err) {
+    showStatus('Error: ' + err.message, 'error');
+  }
+}
+
+function pollAttributes() {
+  pollTimer = setInterval(async () => {
+    try {
+      const r = await fetch(`${BACKEND}/api/jobs/${jobId}/attributes_progress`);
+      const d = await r.json();
+      setProgress('attrFill', 'attrPct', 'attrLabel', d.progress, 'Extracting attributes...');
+      document.getElementById('attrPhase').textContent = d.phase || '';
+
+      if (d.status === 'attributes_done') {
+        clearInterval(pollTimer);
+        // Show flagged items
+        if (d.flagged && d.flagged.length > 0) {
+          const fl = document.getElementById('flaggedList');
+          fl.innerHTML = '';
+          d.flagged.forEach(f => {
+            fl.innerHTML += `<div class="flagged-item"><strong>${f.sku}</strong>: ${f.reason}</div>`;
+          });
+          document.getElementById('flaggedSection').style.display = 'block';
+        }
+        document.getElementById('attrNextBtn').style.display = 'flex';
+        showStatus('Attribute extraction complete. Review any flagged items above.', 'success');
+      } else if (d.status === 'error') {
+        clearInterval(pollTimer);
+        showStatus('Extraction error: ' + d.error, 'error');
+      }
+    } catch (err) {
+      clearInterval(pollTimer);
+    }
+  }, 3000);
+}
+
+// ── TEMPLATE UPLOAD ───────────────────────────────────────────────────────────
+const tmplDrop = document.getElementById('tmplDropZone');
+const tmplInput = document.getElementById('tmplInput');
+tmplDrop.addEventListener('click', () => tmplInput.click());
+tmplInput.addEventListener('change', () => {
+  const f = tmplInput.files[0];
+  if (f) {
+    window._templateFile = f;
+    document.getElementById('tmplInfo').innerHTML = `✅ <strong>${f.name}</strong>`;
+    document.getElementById('tmplInfo').classList.add('show');
+    document.getElementById('tmplBtn').disabled = false;
+  }
+});
+
+async function uploadTemplate() {
+  if (!window._templateFile) return;
+  document.getElementById('tmplBtn').disabled = true;
+  showStatus('Uploading template...', 'info');
+  try {
+    const form = new FormData();
+    form.append('file', window._templateFile);
+    const r = await fetch(`${BACKEND}/api/jobs/${jobId}/upload_template`, { method: 'POST', body: form });
+    if (!r.ok) throw new Error('Template upload failed');
+    goToPhase(7);
+    showStatus('Template uploaded. Generating Excel...', 'info');
+    triggerExcelGeneration();
+  } catch (err) {
+    showStatus('Error: ' + err.message, 'error');
+    document.getElementById('tmplBtn').disabled = false;
+  }
+}
+
+// ── EXCEL GENERATION ──────────────────────────────────────────────────────────
+async function triggerExcelGeneration() {
+  document.getElementById('genFill').style.width = '20%';
+  try {
+    const r = await fetch(`${BACKEND}/api/jobs/${jobId}/generate_excel`, { method: 'POST' });
+    if (!r.ok) throw new Error('Generation failed');
+    pollGeneration();
+  } catch (err) {
+    showStatus('Error: ' + err.message, 'error');
+  }
+}
+
+function pollGeneration() {
+  pollTimer = setInterval(async () => {
+    try {
+      const r = await fetch(`${BACKEND}/api/jobs/${jobId}/progress`);
+      const d = await r.json();
+
+      if (d.status === 'excel_done' || d.phase === 'excel_done') {
+        clearInterval(pollTimer);
+        document.getElementById('genFill').style.width = '100%';
+        document.getElementById('genLabel').textContent = 'Excel generated!';
+        // Run validation
+        await runValidation();
+      } else if (d.status === 'error') {
+        clearInterval(pollTimer);
+        showStatus('Error: ' + d.error, 'error');
+      }
+    } catch (err) {
+      clearInterval(pollTimer);
+    }
+  }, 2000);
+}
+
+async function runValidation() {
+  try {
+    const r = await fetch(`${BACKEND}/api/jobs/${jobId}/validate`);
+    const d = await r.json();
+    const vr = document.getElementById('validationReport');
+    vr.innerHTML = '';
+    if (d.passed) {
+      vr.innerHTML = '<div class="v-pass">✅ All validation checks passed! No issues found.</div>';
+    } else {
+      d.issues.forEach(issue => {
+        vr.innerHTML += `<div class="v-issue">Row ${issue.row} — ${issue.column}: ${issue.issue}</div>`;
+      });
+    }
+    document.getElementById('validationSection').style.display = 'block';
+    document.getElementById('genNextBtn').style.display = 'flex';
+
+    // Set result counters
+    document.getElementById('r_total').textContent = allImages.length;
+    document.getElementById('r_approved').textContent = approvedImages.length;
+    document.getElementById('r_drive').textContent = driveLinksCount;
+    document.getElementById('r_rows').textContent = approvedImages.length;
+
+    showStatus(d.passed ? '✅ Validation passed! Excel is ready to download.' : `⚠️ ${d.issues_found} issues found. Highlighted in Excel.`, d.passed ? 'success' : 'warning');
+  } catch (err) {
+    showStatus('Validation error: ' + err.message, 'error');
+  }
+}
+
+// ── DOWNLOADS ─────────────────────────────────────────────────────────────────
+function downloadFile(type) {
+  window.open(`${BACKEND}/api/jobs/${jobId}/download/${type}`, '_blank');
+}
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+function goToPhase(n) {
+  for (let i = 1; i <= 8; i++) {
+    const card = document.getElementById(`ph${i}`);
+    const step = document.getElementById(`stp${i}`);
+    const line = document.getElementById(`sl${i}`);
+    card.classList.toggle('active', i === n);
+    step.className = 'step-item' + (i < n ? ' done' : i === n ? ' active' : '');
+    if (line) line.style.background = i < n ? '#27ae60' : '#d0d7de';
+  }
+  window.scrollTo(0, 0);
+}
+
+function showStatus(msg, type) {
+  const b = document.getElementById('statusBar');
+  b.textContent = msg;
+  b.className = `status-bar show ${type}`;
+}
+
+function setBadge(text, cls) {
+  const b = document.getElementById('backendBadge');
+  b.textContent = text;
+  b.className = `backend-badge ${cls}`;
+}
+
+function setProgress(fillId, pctId, labelId, pct, label) {
+  document.getElementById(fillId).style.width = (pct || 0) + '%';
+  if (pctId) document.getElementById(pctId).textContent = Math.round(pct || 0) + '%';
+  if (labelId) document.getElementById(labelId).textContent = label || '';
+}
+
+function resetAll() {
+  jobId = null; allImages = []; imageStates = {}; categories = [];
+  approvedImages = []; driveLinksCount = 0;
+  clearInterval(pollTimer);
+  window._catalogFile = null;
+  window._templateFile = null;
+  document.getElementById('fileInput').value = '';
+  document.getElementById('tmplInput').value = '';
+  document.getElementById('fileInfo').classList.remove('show');
+  document.getElementById('tmplInfo').classList.remove('show');
+  document.getElementById('brandInput').value = '';
+  document.getElementById('tagInput').value = '';
+  document.getElementById('tagsWrap').querySelectorAll('.tag').forEach(t => t.remove());
+  document.getElementById('imagesGrid').innerHTML = '';
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('tmplBtn').disabled = true;
+  document.getElementById('confirmBtn').disabled = true;
+  document.getElementById('driveResult').style.display = 'none';
+  document.getElementById('driveDownloadBtns').style.display = 'none';
+  document.getElementById('driveNextBtn').style.display = 'none';
+  document.getElementById('attrNextBtn').style.display = 'none';
+  document.getElementById('genNextBtn').style.display = 'none';
+  document.getElementById('flaggedSection').style.display = 'none';
+  document.getElementById('validationSection').style.display = 'none';
+  goToPhase(1);
+  showStatus('Ready to process a new catalog.', 'info');
+}
+</script>
 </body>
 </html>
