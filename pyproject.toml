@@ -30,10 +30,6 @@ testpaths = ["tests", "programs/scraper/tests"]
 
 [tool.ruff]
 target-version = "py312"
-# The pre-existing CatalogAI web app (backend/frontend/deployment) is not part
-# of BK Foundry; scope lint to the foundry code. Directory scoping only — no
-# per-file ignores.
-extend-exclude = ["backend", "frontend", "deployment"]
 
 # Full default ruff rules apply to every foundry file we author. The only
 # exception is the frozen, byte-for-byte locked dependency (the BK-PACK core and
