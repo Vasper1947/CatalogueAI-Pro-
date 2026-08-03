@@ -15,6 +15,7 @@ dependencies = [
     "pymupdf",
     "beautifulsoup4",
     "playwright",
+    "python-multipart",
     "pytest",
     "ruff",
 ]
@@ -26,7 +27,10 @@ dependencies = [
 where = ["packages", "programs"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests", "programs/scraper/tests"]
+# importlib mode lets same-named test files live under multiple test dirs
+# (e.g. each program's tests/test_app.py) without sys.path collisions.
+addopts = "--import-mode=importlib"
+testpaths = ["tests", "programs/scraper/tests", "programs/pdfworker/tests"]
 
 [tool.ruff]
 target-version = "py312"
