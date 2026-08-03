@@ -33,12 +33,11 @@ target-version = "py312"
 # per-file ignores.
 extend-exclude = ["backend", "frontend", "deployment"]
 
-[tool.ruff.lint]
-# Pin to ruff's long-standing default rule set: pycodestyle errors (E4/E7/E9)
-# plus pyflakes (F) — i.e. correctness and basic style. The BK-PACK core and
-# tests/test_bkpack.py are a locked, byte-for-byte dependency that must not be
-# modified; they are fully clean under this set. Newer ruff releases widened
-# their implicit default to include style/modernization rules (I/UP/RUF) that
-# would require rewriting those frozen files, so we do not enable them here.
-# This is a global select, not a per-file ignore.
-select = ["E4", "E7", "E9", "F"]
+# Full default ruff rules apply to every foundry file we author. The only
+# exception is the frozen, byte-for-byte locked dependency (the BK-PACK core and
+# its test): those must not be reformatted, so the style/modernization rules
+# newer ruff enables by default (I001/UP045/UP017/RUF022) are ignored for those
+# files only. Everything else obeys the full default rule set.
+[tool.ruff.lint.per-file-ignores]
+"packages/bkpack/*" = ["I001", "UP045", "UP017", "RUF022"]
+"tests/test_bkpack.py" = ["I001", "UP045", "UP017", "RUF022"]

@@ -6,8 +6,8 @@ then shows the ledger refusing to even construct a fabricated field.
 """
 
 from bkpack.evidence import EvidenceRow
-from bkpack.writer import build_bkpack
 from bkpack.validator import validate_bkpack
+from bkpack.writer import build_bkpack
 
 print("=== 1. Building a BK-PACK with real, sourced data ===")
 rows = [
