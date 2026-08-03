@@ -13,18 +13,20 @@ dependencies = [
     "boto3",
     "pillow",
     "pymupdf",
+    "beautifulsoup4",
+    "playwright",
     "pytest",
     "ruff",
 ]
 
-# The importable packages live under packages/ (bkpack, common) and are made
-# available via a normal editable install (pip install -e .) — no sys.path or
-# PYTHONPATH hacks anywhere.
+# Importable packages live under packages/ (bkpack, common) and programs/
+# (scraper), made available via a normal editable install (pip install -e .) —
+# no sys.path or PYTHONPATH hacks anywhere.
 [tool.setuptools.packages.find]
-where = ["packages"]
+where = ["packages", "programs"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "programs/scraper/tests"]
 
 [tool.ruff]
 target-version = "py312"

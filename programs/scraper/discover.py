@@ -1,0 +1,281 @@
+"""Discovery layer: find product URLs and read structured data from a page.
+
+Two layers in this slice:
+  * ``fetch_sitemap`` enumerates product URLs from sitemap.xml (and any sitemap
+    referenced in robots.txt). It never guesses URLs — no sitemap means [].
+  * ``extract_structured_data`` reads schema.org/Product JSON-LD from a page and
+    returns only the fields actually present. It never fabricates a field.
+
+robots.txt is consulted via ``robots_allows`` before any live fetch; a
+disallowed URL is refused by the caller, not fetched.
+
+Every function that touches the network accepts an injected source (``get_text``
+/ ``robots_txt`` / ``html``) so the automated tests run entirely on fixtures.
+"""
+
+from __future__ import annotations
+
+import http.client
+import json
+import urllib.error
+import urllib.request
+import urllib.robotparser
+import xml.etree.ElementTree as ET
+from collections.abc import Callable, Iterator
+from urllib.parse import urlparse
+
+from bs4 import BeautifulSoup
+
+USER_AGENT = "BKFoundryScraper/0.1 (+https://github.com/Vasper1947/CatalogueAI-Pro-)"
+
+
+def _http_get(url: str, *, timeout: float = 15.0) -> str | None:
+    """Fetch text over HTTP with our UA. Returns None on any failure."""
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            charset = resp.headers.get_content_charset() or "utf-8"
+            return resp.read().decode(charset, errors="replace")
+    except (OSError, ValueError, urllib.error.URLError, http.client.HTTPException):
+        return None
+
+
+def _get_robots(
+    base_url: str, *, robots_txt: str | None = None
+) -> urllib.robotparser.RobotFileParser:
+    """Return a parsed robots.txt for base_url's domain.
+
+    If ``robots_txt`` is supplied (a fixture) it is parsed directly with no
+    network call. A missing/unreachable robots.txt is treated as allow-all,
+    per the robots convention.
+    """
+    parsed = urlparse(base_url)
+    robots_url = f"{parsed.scheme}://{parsed.netloc}/robots.txt"
+    rp = urllib.robotparser.RobotFileParser()
+    rp.set_url(robots_url)
+    if robots_txt is None:
+        robots_txt = _http_get(robots_url)
+    rp.parse(robots_txt.splitlines() if robots_txt else [])
+    return rp
+
+
+def robots_allows(page_url: str, *, robots_txt: str | None = None) -> bool:
+    """True if our user agent may fetch page_url according to robots.txt."""
+    rp = _get_robots(page_url, robots_txt=robots_txt)
+    return rp.can_fetch(USER_AGENT, page_url)
+
+
+def _sitemaps_from_robots(base_url: str, *, robots_txt: str | None = None) -> list[str]:
+    rp = _get_robots(base_url, robots_txt=robots_txt)
+    maps = rp.site_maps()
+    return list(maps) if maps else []
+
+
+def _local_name(tag: str) -> str:
+    """The tag name without its XML namespace, e.g. '{ns}loc' -> 'loc'."""
+    return tag.rsplit("}", 1)[-1]
+
+
+def _parse_sitemap(xml_text: str) -> tuple[str, list[str]]:
+    """Parse a sitemap document.
+
+    Returns ``(kind, locs)`` where kind is 'index' (locs point at child
+    sitemaps) or 'urlset' (locs are page URLs). Unparseable input -> empty.
+    """
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return ("urlset", [])
+    kind = "index" if _local_name(root.tag) == "sitemapindex" else "urlset"
+    locs = [
+        node.text.strip()
+        for node in root.iter()
+        if _local_name(node.tag) == "loc" and node.text and node.text.strip()
+    ]
+    return (kind, locs)
+
+
+def fetch_sitemap(
+    base_url: str,
+    *,
+    get_text: Callable[[str], str | None] | None = None,
+    robots_txt: str | None = None,
+) -> list[str]:
+    """Return product-page URLs discovered from the site's sitemap(s).
+
+    Checks ``/sitemap.xml`` plus any ``Sitemap:`` entries in robots.txt, and
+    follows a sitemap index one level down to its child sitemaps. Returns [] if
+    no sitemap is found — it never guesses at URLs.
+
+    ``get_text(url) -> str | None`` is injected so tests supply fixtures rather
+    than making live calls; it defaults to a real HTTP GET.
+    """
+    if get_text is None:
+        get_text = _http_get
+
+    parsed = urlparse(base_url)
+    root = f"{parsed.scheme}://{parsed.netloc}"
+    candidates = [f"{root}/sitemap.xml", *_sitemaps_from_robots(base_url, robots_txt=robots_txt)]
+
+    seen: set[str] = set()
+    urls: list[str] = []
+
+    def _add(url: str) -> None:
+        if url not in seen:
+            seen.add(url)
+            urls.append(url)
+
+    for sitemap_url in candidates:
+        text = get_text(sitemap_url)
+        if not text:
+            continue
+        kind, locs = _parse_sitemap(text)
+        if kind == "index":
+            for child_url in locs:
+                child_text = get_text(child_url)
+                if not child_text:
+                    continue
+                _, child_locs = _parse_sitemap(child_text)
+                for url in child_locs:
+                    _add(url)
+        else:
+            for url in locs:
+                _add(url)
+
+    return urls
+
+
+def _first_image(value: object) -> str | None:
+    if isinstance(value, list) and value:
+        value = value[0]
+    if isinstance(value, dict):
+        found = value.get("url") or value.get("contentUrl")
+        return found if isinstance(found, str) else None
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
+def _brand_name(value: object) -> str | None:
+    if isinstance(value, dict):
+        name = value.get("name")
+        return name.strip() if isinstance(name, str) and name.strip() else None
+    if isinstance(value, list) and value:
+        return _brand_name(value[0])
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
+def _offer_price(value: object) -> str | None:
+    if isinstance(value, list) and value:
+        value = value[0]
+    if isinstance(value, dict):
+        price = value.get("price")
+        if price is None and isinstance(value.get("priceSpecification"), dict):
+            price = value["priceSpecification"].get("price")
+        if price is not None and str(price).strip():
+            return str(price).strip()
+    return None
+
+
+def _product_fields(node: dict) -> dict:
+    """Pull the known schema.org/Product fields that are present on one node.
+
+    A field only appears in the result if it is actually present with a value —
+    an absent field is omitted, never guessed.
+    """
+    fields: dict[str, str] = {}
+    name = node.get("name")
+    if isinstance(name, str) and name.strip():
+        fields["name"] = name.strip()
+    sku = node.get("sku")
+    if sku is not None and str(sku).strip():
+        fields["sku"] = str(sku).strip()
+    image = _first_image(node.get("image"))
+    if image:
+        fields["image"] = image
+    description = node.get("description")
+    if isinstance(description, str) and description.strip():
+        fields["description"] = description.strip()
+    brand = _brand_name(node.get("brand"))
+    if brand:
+        fields["brand"] = brand
+    price = _offer_price(node.get("offers"))
+    if price:
+        fields["price"] = price
+    return fields
+
+
+def _is_product_type(type_value: object) -> bool:
+    if isinstance(type_value, str):
+        return type_value.split("/")[-1] == "Product"
+    if isinstance(type_value, list):
+        return any(_is_product_type(t) for t in type_value)
+    return False
+
+
+def _find_products(data: object) -> Iterator[dict]:
+    if isinstance(data, list):
+        for item in data:
+            yield from _find_products(item)
+    elif isinstance(data, dict):
+        if "@graph" in data:
+            yield from _find_products(data["@graph"])
+        if _is_product_type(data.get("@type")):
+            yield data
+
+
+def _iter_jsonld_products(html: str) -> Iterator[dict]:
+    soup = BeautifulSoup(html, "html.parser")
+    for tag in soup.find_all("script", attrs={"type": "application/ld+json"}):
+        raw = tag.string or tag.get_text()
+        if not raw or not raw.strip():
+            continue
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        yield from _find_products(data)
+
+
+def _render_html(page_url: str) -> str | None:
+    """Render page_url with headless Chromium and return its HTML.
+
+    Imported lazily so the module (and its fixture-based tests) do not require
+    Playwright to be installed.
+    """
+    try:
+        from playwright.sync_api import Error as PlaywrightError
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return None
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page(user_agent=USER_AGENT)
+            page.goto(page_url, wait_until="domcontentloaded", timeout=30000)
+            html = page.content()
+            browser.close()
+            return html
+    except (PlaywrightError, OSError):
+        return None
+
+
+def extract_structured_data(page_url: str, *, html: str | None = None) -> dict:
+    """Return the schema.org/Product fields found in page_url's JSON-LD.
+
+    ``html`` supplies the page markup directly (tests use a fixture); otherwise
+    the page is rendered with Playwright so JS-built markup is included. Returns
+    only fields actually present — an absent field is omitted, never guessed. An
+    empty dict means no usable structured data was found.
+    """
+    if html is None:
+        html = _render_html(page_url)
+    if not html:
+        return {}
+    for node in _iter_jsonld_products(html):
+        fields = _product_fields(node)
+        if fields:
+            return fields
+    return {}
