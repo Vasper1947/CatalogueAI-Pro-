@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bk-foundry"
+version = "0.1.0"
+description = "BK's catalog automation programs and the BK-PACK interchange core."
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "boto3",
+    "pillow",
+    "pymupdf",
+    "pytest",
+    "ruff",
+]
+
+# The importable packages live under packages/ (bkpack, common) and are made
+# available via a normal editable install (pip install -e .) — no sys.path or
+# PYTHONPATH hacks anywhere.
+[tool.setuptools.packages.find]
+where = ["packages"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+# The pre-existing CatalogAI web app (backend/frontend/deployment) is not part
+# of BK Foundry; scope lint to the foundry code. Directory scoping only — no
+# per-file ignores.
+extend-exclude = ["backend", "frontend", "deployment"]
+
+[tool.ruff.lint]
+# Pin to ruff's long-standing default rule set: pycodestyle errors (E4/E7/E9)
+# plus pyflakes (F) — i.e. correctness and basic style. The BK-PACK core and
+# tests/test_bkpack.py are a locked, byte-for-byte dependency that must not be
+# modified; they are fully clean under this set. Newer ruff releases widened
+# their implicit default to include style/modernization rules (I/UP/RUF) that
+# would require rewriting those frozen files, so we do not enable them here.
+# This is a global select, not a per-file ignore.
+select = ["E4", "E7", "E9", "F"]

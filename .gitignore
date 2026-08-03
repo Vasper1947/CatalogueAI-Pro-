@@ -39,3 +39,12 @@ Thumbs.db
 # Node
 node_modules/
 npm-debug.log
+
+# BK Foundry (Python packaging / tooling)
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+sample.bkpack.zip
+*.bkpack.zip
