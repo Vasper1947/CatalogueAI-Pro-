@@ -48,3 +48,6 @@ dist/
 .ruff_cache/
 sample.bkpack.zip
 *.bkpack.zip
+
+# Generated schema store (parsed from the user's private ~510 templates)
+packages/schemas/data/

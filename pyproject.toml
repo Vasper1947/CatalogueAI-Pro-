@@ -16,6 +16,7 @@ dependencies = [
     "beautifulsoup4",
     "playwright",
     "python-multipart",
+    "openpyxl",
     "pytest",
     "ruff",
 ]
@@ -30,7 +31,12 @@ where = ["packages", "programs"]
 # importlib mode lets same-named test files live under multiple test dirs
 # (e.g. each program's tests/test_app.py) without sys.path collisions.
 addopts = "--import-mode=importlib"
-testpaths = ["tests", "programs/scraper/tests", "programs/pdfworker/tests"]
+testpaths = [
+    "tests",
+    "programs/scraper/tests",
+    "programs/pdfworker/tests",
+    "packages/schemas/tests",
+]
 
 [tool.ruff]
 target-version = "py312"
