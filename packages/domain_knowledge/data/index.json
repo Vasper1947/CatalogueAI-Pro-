@@ -13,5 +13,10 @@
     "file": "Plumbing & Sanitary Ware - Sanitary Ware - Wash Basins & Pedestals - Vessel Basins.json",
     "review_status": "confirmed",
     "researched_at": "2026-08-04T09:27:40.472271+00:00"
+  },
+  "Plumbing & Sanitary Ware > Plumbing Materials > Pipes & Fittings > PVC": {
+    "file": "Plumbing & Sanitary Ware - Plumbing Materials - Pipes & Fittings - PVC.json",
+    "review_status": "pending_review",
+    "researched_at": "2026-08-04T10:17:03.026494+00:00"
   }
 }

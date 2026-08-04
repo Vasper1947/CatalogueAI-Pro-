@@ -9,6 +9,7 @@ exists (no changes to that package).
 
 from __future__ import annotations
 
+import re
 from urllib.parse import urlparse
 
 from bkpack.evidence import EvidenceRow
@@ -35,6 +36,12 @@ CONFIDENCE_SPEC_TABLE = 0.95
 CONFIDENCE_SPEC_TABLE_UNCERTAIN = 0.4
 CONFIDENCE_STRUCTURED = 0.9
 CONFIDENCE_LOOSE = 0.6
+# A Brand inferred by a whole-word hit against the schema's own closed Brand
+# vocabulary. Above the loose text fallback (0.6, unconstrained free text) because
+# the value is constrained to a known brand set; below an author-declared Brand
+# field (JSON-LD 0.9 / spec-table 0.95) because it is inferred from prose position,
+# not a field the source labelled "Brand".
+CONFIDENCE_VOCABULARY = 0.7
 
 PRODUCER = {"program": 1, "app_version": "0.1.0", "agent_id": "scraper"}
 SUGGESTED_CATEGORY_FIELD = "suggested_category"
@@ -188,6 +195,77 @@ def spec_table_rows(
     return rows
 
 
+def match_brand_from_vocabulary(
+    product_text, schema, *, source_uri: str, record_id: str
+) -> EvidenceRow | None:
+    """Infer a Brand from the schema's own Lookup:Brand vocabulary.
+
+    Cross-references each brand in ``schema["lookups"]["Brand"]`` against the
+    product text, case-insensitive and WHOLE-WORD (no substring, no fuzzy). The
+    first vocabulary brand present as a whole word yields a Brand EvidenceRow
+    sourced to the page. A schema with no Brand vocabulary (e.g. a free-text Brand
+    field, as the TMT schemas have) or no hit yields None.
+
+    ``source_uri`` / ``record_id`` are required because every EvidenceRow value
+    must carry provenance — they are the page URL and product id, not part of the
+    matching logic itself.
+
+    Caveat: the vocabulary is the schema's as-is. A generic list may contain
+    common words (e.g. "India"); a whole-word hit on such a token is a real match
+    per this rule but a vocabulary-quality risk, not a bug here.
+    """
+    vocab = (schema.get("lookups") or {}).get("Brand") or []
+    text = str(product_text or "")
+    if not vocab or not text.strip():
+        return None
+    for brand in vocab:
+        b = str(brand).strip()
+        if b and re.search(r"\b" + re.escape(b) + r"\b", text, flags=re.IGNORECASE):
+            return EvidenceRow(
+                record_id=record_id,
+                field="Brand",
+                value=b,
+                source_uri=source_uri,
+                method="scrape",
+                confidence=CONFIDENCE_VOCABULARY,
+            )
+    return None
+
+
+def _schema_for_path(category_path, schemas):
+    target = list(category_path)
+    for s in schemas:
+        if list(s.get("category_path", [])) == target:
+            return s
+    return None
+
+
+def brand_vocab_rows(
+    fields: dict, page_url: str, *, schemas: list | None = None
+) -> list[EvidenceRow]:
+    """Zero or one Brand row inferred from the top-suggested category's vocabulary.
+
+    Fires only when the product classifies to a single leaf category (not a tied
+    family prefix) whose schema declares a Brand vocabulary, and a vocabulary
+    brand appears whole-word in the product's name+description. Emits nothing
+    otherwise — a real absence, never a guess.
+    """
+    suggestion = _top_category_suggestion(fields, schemas)
+    if suggestion is None:
+        return []
+    pool = schemas if schemas is not None else _cached_schemas()
+    schema = _schema_for_path(suggestion.category_path, pool)
+    if schema is None:  # tied family prefix, or no matching leaf schema
+        return []
+    text = " ".join(
+        str(fields[k]) for k in ("name", "description") if fields.get(k)
+    ).strip()
+    row = match_brand_from_vocabulary(
+        text, schema, source_uri=page_url, record_id=_record_id(fields, page_url)
+    )
+    return [row] if row is not None else []
+
+
 def build_pack_from_fields(
     fields: dict,
     page_url: str,
@@ -212,6 +290,10 @@ def build_pack_from_fields(
     rows = rows + classification_rows(fields, page_url, schemas=schemas)
     if page_html:
         rows = rows + spec_table_rows(page_html, page_url, record_id=record_id)
+    # Infer Brand from the category's vocabulary, but only if the page did not
+    # already provide a Brand field of its own (no overwrite, no duplicate).
+    if not any(r.field.strip().lower() == "brand" for r in rows):
+        rows = rows + brand_vocab_rows(fields, page_url, schemas=schemas)
     build_bkpack(
         output_path=output_path,
         evidence_rows=rows,

@@ -11,6 +11,8 @@ import re
 from dataclasses import dataclass, field
 
 from schemas.aliases import resolve_field
+from schemas.sections import is_commercial_construct
+from scraper.units import normalize_value
 
 MATCH_THRESHOLD = 0.5  # named + tunable: below this there is no confident match
 
@@ -98,8 +100,14 @@ def _writable_names(schema) -> list[str]:
 def _required_writable_names(schema) -> list[str]:
     """Required fields a human/evidence must supply: the schema's own ``required``
     flag intersected with writable fields. Locked/formula required fields auto-fill
-    and can never be evidence-matched, so they are not counted as recall gaps."""
-    return [f["name"] for f in writable_fields(schema) if f.get("required")]
+    and can never be evidence-matched; Pricing & Inventory fields are BK selling
+    constructs a supplier page never states (is_commercial_construct). Neither is
+    counted as a recall gap."""
+    return [
+        f["name"]
+        for f in writable_fields(schema)
+        if f.get("required") and not is_commercial_construct(f)
+    ]
 
 
 def _evidence_field_map(bkpack_evidence) -> dict[str, str]:
@@ -160,6 +168,44 @@ def _score(evidence_map: dict, schema):
     return precision, recall, matched_fields, required_present, required_missing
 
 
+def _size_key(text):
+    """Normalized (value, unit) if ``text`` is a single number+unit, else None."""
+    value, unit, _conf = normalize_value(text)
+    if isinstance(value, (int, float)) and unit is not None:
+        return (value, unit)
+    return None
+
+
+def resolve_sibling_tie(tied_candidates, evidence):
+    """Break a genuine top-precision tie by matching a size in the category path.
+
+    For each tied candidate, take its category_path's final segment (e.g. "12mm")
+    and normalize it via units.py. If exactly ONE tied candidate's segment is a
+    number+unit that exactly equals some evidence value's normalized form in the
+    same canonical unit, return that candidate. If zero or more than one match,
+    return None — an unresolved tie stays honestly unresolved, never a forced pick.
+
+    ``evidence`` may be the evidence map (field -> value) or any iterable of
+    values; only the values are read. No fuzzy matching: equality is exact on the
+    canonical-unit normalized number.
+    """
+    values = evidence.values() if isinstance(evidence, dict) else evidence
+    evidence_sizes = set()
+    for v in values:
+        key = _size_key(v)
+        if key is not None:
+            evidence_sizes.add(key)
+    if not evidence_sizes:
+        return None
+    matches = [
+        cand
+        for cand in tied_candidates
+        if (_size_key(cand.category_path[-1]) if cand.category_path else None)
+        in evidence_sizes
+    ]
+    return matches[0] if len(matches) == 1 else None
+
+
 def match_template(bkpack_evidence, schemas):
     """Return (best_schema | None, confidence, all_candidates_scored).
 
@@ -174,25 +220,37 @@ def match_template(bkpack_evidence, schemas):
     can see what else was close.
     """
     evidence_map = _evidence_field_map(bkpack_evidence)
+    # Each entry pairs a Candidate with its schema so a tie-break reorder keeps
+    # the two in lockstep.
     scored = []
     for schema in schemas:
         precision, recall, matched, req_present, req_missing = _score(evidence_map, schema)
-        scored.append((schema, precision, recall, matched, req_present, req_missing))
-    # Sort by precision only — the match decision is unchanged.
-    scored.sort(key=lambda t: t[1], reverse=True)
-
-    candidates = [
-        Candidate(
-            category_path=s.get("category_path", []),
+        cand = Candidate(
+            category_path=schema.get("category_path", []),
             score=precision,
             matched_fields=matched,
             recall=recall,
             required_present=req_present,
             required_missing=req_missing,
         )
-        for s, precision, recall, matched, req_present, req_missing in scored
-    ]
-    if scored and scored[0][1] >= MATCH_THRESHOLD:
-        return scored[0][0], scored[0][1], candidates
-    confidence = scored[0][1] if scored else 0.0
+        scored.append((cand, schema))
+    # Sort by precision only — the match decision is unchanged.
+    scored.sort(key=lambda t: t[0].score, reverse=True)
+
+    # Break a genuine tie at the top precision by value, when exactly one sibling
+    # matches. Only reorders within the equal-precision group; the decision below
+    # still runs on precision.
+    if len(scored) > 1:
+        top = scored[0][0].score
+        tied_idx = [i for i, (c, _s) in enumerate(scored) if c.score == top]
+        if len(tied_idx) > 1:
+            resolved = resolve_sibling_tie([scored[i][0] for i in tied_idx], evidence_map)
+            if resolved is not None and scored[0][0] is not resolved:
+                j = next(i for i in tied_idx if scored[i][0] is resolved)
+                scored.insert(0, scored.pop(j))
+
+    candidates = [c for c, _s in scored]
+    if scored and scored[0][0].score >= MATCH_THRESHOLD:
+        return scored[0][1], scored[0][0].score, candidates
+    confidence = scored[0][0].score if scored else 0.0
     return None, confidence, candidates

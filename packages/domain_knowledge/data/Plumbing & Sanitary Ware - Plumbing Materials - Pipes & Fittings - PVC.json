@@ -1,0 +1,71 @@
+{
+  "category_path": [
+    "Plumbing & Sanitary Ware",
+    "Plumbing Materials",
+    "Pipes & Fittings",
+    "PVC"
+  ],
+  "plausible_ranges": {
+    "Nominal Diameter": {
+      "min": 25.0,
+      "max": 630.0,
+      "unit": "mm",
+      "source_url": "https://hsinfraproc.com/is-4985-pvc-pipes.html"
+    },
+    "Wall Thickness": {
+      "min": 1.5,
+      "max": 25.0,
+      "unit": "mm",
+      "source_url": "https://www.engineeringtoolbox.com/pvc-cpvc-pipes-dimensions-d_795.html"
+    }
+  },
+  "standards": [
+    {
+      "name": "IS 4985 (uPVC pipes for potable water supply)",
+      "description": "Bureau of Indian Standards specification for unplasticized PVC (uPVC) pipes for potable water supply. Nominal sizes ~25-630 mm; pressure classes 1-4 = PN 0.25/0.40/0.60/0.80 MPa; wall thickness based on a safe working stress of 8 MPa at 27 C. Governing standard.",
+      "source_url": "https://bis.gov.in/wp-content/uploads/IS-4985-Product-Manual.pdf"
+    },
+    {
+      "name": "ASTM D1785 (PVC plastic pipe, Schedules 40, 80, 120)",
+      "description": "Dimensional/performance specification for PVC pipe in Schedules 40/80/120, nominal sizes 1/8 in to 24 in; same OD across schedules at a given size, thicker wall = higher pressure. Governing standard.",
+      "source_url": "https://www.engineeringtoolbox.com/pvc-cpvc-pipes-dimensions-d_795.html"
+    },
+    {
+      "name": "ASTM D2241 (PVC pressure-rated pipe, SDR series)",
+      "description": "Specification for PVC pressure pipe by Standard Dimension Ratio (SDR 13.5, 17, 21, 26, 32.5, 41, 51, 64). Governing standard.",
+      "source_url": "https://www.engineeringtoolbox.com/ASTM-D2241-pvc-sdr-pipe-d_2129.html"
+    }
+  ],
+  "terminology": {
+    "uPVC": {
+      "canonical_term": "PVC-U - unplasticized (rigid) polyvinyl chloride (Material)",
+      "source_url": "https://www.gfps.com/content/dam/gfps/com/specifications/en/gfps-system-specification-pvcu-metric-en.pdf"
+    },
+    "SDR": {
+      "canonical_term": "Standard Dimension Ratio = nominal outside diameter / nominal wall thickness (higher SDR = thinner wall, lower pressure)",
+      "source_url": "https://www.engineeringtoolbox.com/sdr-standard-dimension-ratio-d_318.html"
+    },
+    "PN": {
+      "canonical_term": "Nominal Pressure (French 'Pression Nominale'); the number approximates the pressure rating in bar (Pressure Class)",
+      "source_url": "https://www.pe100plus.com/PE-Pipes/Technical-guidance/model/Design/SDR/pressure-rating-i1047.html"
+    },
+    "DN": {
+      "canonical_term": "Nominal Diameter (diametre nominal), metric nominal bore in mm (Nominal Diameter)",
+      "source_url": "https://www.engineeringtoolbox.com/sdr-standard-dimension-ratio-d_318.html"
+    }
+  },
+  "researched_at": "2026-08-04T10:17:03.026494+00:00",
+  "review_status": "pending_review",
+  "industry_references": [
+    {
+      "name": "Wavin U-PVC / O-PVC pressure pipe technical catalogue (manufacturer)",
+      "description": "Manufacturer technical catalogue of uPVC pressure pipe systems: dimensions, pressure classes, jointing. Manufacturer spec, not a governing standard.",
+      "source_url": "https://mediahub.wavin.com/m/5f1cb8b739f30d7b/original/U-PVC-O-PVC-TECHNICAL-CATALOGUE.pdf"
+    },
+    {
+      "name": "GF Piping Systems PVC-U metric system specification (manufacturer)",
+      "description": "Manufacturer system specification for metric PVC-U pipe, incl. SDR/PN dimensioning. Manufacturer spec, not a governing standard.",
+      "source_url": "https://www.gfps.com/content/dam/gfps/com/specifications/en/gfps-system-specification-pvcu-metric-en.pdf"
+    }
+  ]
+}
