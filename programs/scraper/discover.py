@@ -279,3 +279,40 @@ def extract_structured_data(page_url: str, *, html: str | None = None) -> dict:
         if fields:
             return fields
     return {}
+
+
+def extract_spec_table(page_html: str) -> list[tuple[str, str]]:
+    """Extract (key, value) spec pairs from two-column tables and definition lists.
+
+    Only the clear two-column key/value shape is trusted:
+      * ``<table>`` rows with exactly two cells (``<th>``/``<td>``), and
+      * ``<dl>`` definition lists (``<dt>`` paired with its following ``<dd>``s).
+
+    Wide/data tables, single-cell rows, and bespoke non-table spec widgets
+    (arbitrary ``<div>`` layouts, JS-rendered widgets) are out of scope — a page
+    with no table/dl structure yields an empty list, never a guessed parse.
+    """
+    soup = BeautifulSoup(page_html or "", "html.parser")
+    pairs: list[tuple[str, str]] = []
+
+    for table in soup.find_all("table"):
+        for row in table.find_all("tr"):
+            cells = row.find_all(["th", "td"])
+            if len(cells) != 2:
+                continue
+            key = cells[0].get_text(" ", strip=True)
+            value = cells[1].get_text(" ", strip=True)
+            if key and value:
+                pairs.append((key, value))
+
+    for dl in soup.find_all("dl"):
+        current_key: str | None = None
+        for child in dl.find_all(["dt", "dd"]):
+            if child.name == "dt":
+                current_key = child.get_text(" ", strip=True) or None
+            else:  # dd
+                value = child.get_text(" ", strip=True)
+                if current_key and value:
+                    pairs.append((current_key, value))
+
+    return pairs

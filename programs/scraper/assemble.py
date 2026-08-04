@@ -20,9 +20,16 @@ from schemas.classify import (
     top_suggestion,
 )
 
-# Confidence reflects provenance: schema.org JSON-LD is high-trust structured
-# data; a looser (non-structured) fallback would score lower. This slice only
-# emits structured rows, but the seam is here for the later fallback layers.
+from scraper.discover import extract_spec_table
+from scraper.units import normalize_value
+
+# Confidence reflects provenance / extraction path. A spec table's explicit
+# key/value rows are the highest-trust scrape signal, above schema.org JSON-LD;
+# a looser (non-structured) fallback scores lower. A spec value whose unit
+# normalization was ambiguous is dropped to an "uncertain" tier rather than
+# carrying the full spec-table confidence.
+CONFIDENCE_SPEC_TABLE = 0.95
+CONFIDENCE_SPEC_TABLE_UNCERTAIN = 0.4
 CONFIDENCE_STRUCTURED = 0.9
 CONFIDENCE_LOOSE = 0.6
 
@@ -116,6 +123,58 @@ def classification_rows(
     ]
 
 
+def _clean_key(key: str) -> str:
+    return " ".join(key.split()).rstrip(":").strip()
+
+
+def _num_str(number: float) -> str:
+    return str(int(number)) if float(number).is_integer() else str(number)
+
+
+def _format_value(normalized: object, unit: str | None) -> str:
+    if isinstance(normalized, list):
+        body = " x ".join(_num_str(n) for n in normalized)
+        return f"{body} {unit}" if unit else body
+    if isinstance(normalized, (int, float)):
+        return f"{_num_str(normalized)} {unit}" if unit else _num_str(normalized)
+    return str(normalized)
+
+
+def spec_table_rows(
+    page_html: str, page_url: str, *, record_id: str
+) -> list[EvidenceRow]:
+    """One EvidenceRow per spec-table key/value, unit-normalized.
+
+    Spec-table values carry a higher confidence tier than generic JSON-LD
+    fields. A value whose unit normalization was ambiguous is flagged at the
+    uncertain tier and kept as its original text — never dropped, never guessed.
+    Existing JSON-LD row building is untouched.
+    """
+    rows: list[EvidenceRow] = []
+    for key, raw in extract_spec_table(page_html):
+        field = _clean_key(key)
+        normalized, unit, norm_confidence = normalize_value(raw)
+        value = _format_value(normalized, unit)
+        if not field or not value.strip():
+            continue
+        confidence = (
+            CONFIDENCE_SPEC_TABLE
+            if norm_confidence >= 0.5
+            else CONFIDENCE_SPEC_TABLE_UNCERTAIN
+        )
+        rows.append(
+            EvidenceRow(
+                record_id=record_id,
+                field=field,
+                value=value,
+                source_uri=page_url,
+                method="scrape",
+                confidence=confidence,
+            )
+        )
+    return rows
+
+
 def build_pack_from_fields(
     fields: dict,
     page_url: str,
@@ -123,18 +182,23 @@ def build_pack_from_fields(
     *,
     structured: bool = True,
     schemas: list | None = None,
+    page_html: str | None = None,
 ) -> list[EvidenceRow]:
     """Build a BK-PACK at output_path from one page's discovered fields.
 
     Returns the evidence rows written. If the page yielded no usable fields, no
     pack is built and an empty list is returned (never an empty/fabricated pack).
     A single content-based 'suggested_category' row may be appended (see
-    classification_rows); no other row is changed.
+    classification_rows), and — when ``page_html`` is supplied — spec-table rows
+    (see spec_table_rows). No existing JSON-LD-derived row is changed.
     """
     rows = to_evidence_rows(fields, page_url, structured=structured)
     if not rows:
         return []
+    record_id = _record_id(fields, page_url)
     rows = rows + classification_rows(fields, page_url, schemas=schemas)
+    if page_html:
+        rows = rows + spec_table_rows(page_html, page_url, record_id=record_id)
     build_bkpack(
         output_path=output_path,
         evidence_rows=rows,
