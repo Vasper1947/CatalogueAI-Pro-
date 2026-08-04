@@ -3,6 +3,12 @@
 Layout under ``packages/domain_knowledge/data/`` (same pattern as schemas' store):
     <slug>.json    one file per researched category
     index.json     category-path -> {file, review_status, researched_at}
+
+Each <slug>.json is the model's ``to_dict()`` verbatim and is re-read with
+``from_dict()``; there is no separate field schema here. The standards /
+industry_references split (see models.py) therefore round-trips through this
+store with no format change — both are lists of the same {name, description,
+source_url} shape. ``test_store`` covers the round-trip.
 """
 
 from __future__ import annotations

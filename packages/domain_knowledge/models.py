@@ -7,7 +7,7 @@ moves it to ``confirmed``.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 
 REVIEW_PENDING = "pending_review"
 REVIEW_CONFIRMED = "confirmed"
@@ -24,6 +24,16 @@ class PlausibleRange:
 
 @dataclass
 class Standard:
+    """A named reference with a source. Used for two distinct kinds of fact:
+
+    - ``standards``: a genuine governing/regulatory standard (e.g. IS 1786).
+    - ``industry_references``: a real, sourced manufacturer spec or industry
+      norm that is NOT a governing standard (e.g. a Schluter profile datasheet).
+
+    Same shape, deliberately separated so a manufacturer's spec sheet is never
+    presented as if it were a regulatory standard.
+    """
+
     name: str
     description: str
     source_url: str
@@ -39,10 +49,13 @@ class TerminologyEntry:
 class CategoryKnowledge:
     category_path: list
     plausible_ranges: dict  # {field_name: PlausibleRange}
-    standards: list  # list[Standard]
+    standards: list  # list[Standard] — genuine governing/regulatory standards
     terminology: dict  # {synonym: TerminologyEntry}
     researched_at: str
     review_status: str = REVIEW_PENDING
+    # list[Standard] — real, sourced manufacturer specs / industry norms that are
+    # NOT governing standards. Defaults to empty so pre-split data still loads.
+    industry_references: list = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -62,4 +75,7 @@ class CategoryKnowledge:
             },
             researched_at=data.get("researched_at", ""),
             review_status=data.get("review_status", REVIEW_PENDING),
+            industry_references=[
+                Standard(**s) for s in (data.get("industry_references") or [])
+            ],
         )

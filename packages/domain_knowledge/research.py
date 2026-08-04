@@ -36,12 +36,15 @@ def research_category(category_path, schema, findings: dict, *, researched_at: s
     """Build a pending-review CategoryKnowledge from grounded, sourced findings.
 
     ``findings`` = {
-        "plausible_ranges": [{"field","min","max","unit","source_url"}, ...],
-        "standards":        [{"name","description","source_url"}, ...],
-        "terminology":      [{"synonym","canonical_term","source_url"}, ...],
+        "plausible_ranges":     [{"field","min","max","unit","source_url"}, ...],
+        "standards":            [{"name","description","source_url"}, ...],
+        "industry_references":  [{"name","description","source_url"}, ...],
+        "terminology":          [{"synonym","canonical_term","source_url"}, ...],
     }
     A range whose field is not in the schema, or any fact lacking a source_url,
-    is dropped — never invented, never unsourced.
+    is dropped — never invented, never unsourced. ``standards`` is for genuine
+    governing standards; ``industry_references`` is for real, sourced
+    manufacturer specs / industry norms that are not governing standards.
     """
     schema_fields = _schema_field_names(schema)
 
@@ -60,15 +63,19 @@ def research_category(category_path, schema, findings: dict, *, researched_at: s
             source_url=source,
         )
 
-    standards = [
-        Standard(
-            name=item["name"],
-            description=item.get("description", ""),
-            source_url=item["source_url"],
-        )
-        for item in (findings.get("standards") or [])
-        if item.get("name") and item.get("source_url")
-    ]
+    def _named_sourced(key: str) -> list[Standard]:
+        return [
+            Standard(
+                name=item["name"],
+                description=item.get("description", ""),
+                source_url=item["source_url"],
+            )
+            for item in (findings.get(key) or [])
+            if item.get("name") and item.get("source_url")
+        ]
+
+    standards = _named_sourced("standards")
+    industry_references = _named_sourced("industry_references")
 
     terminology: dict[str, TerminologyEntry] = {}
     for item in findings.get("terminology") or []:
@@ -87,4 +94,5 @@ def research_category(category_path, schema, findings: dict, *, researched_at: s
         terminology=terminology,
         researched_at=researched_at or datetime.now(UTC).isoformat(),
         review_status=REVIEW_PENDING,
+        industry_references=industry_references,
     )

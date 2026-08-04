@@ -23,11 +23,49 @@ SYNONYMS = {"title": "name", "cost": "price"}
 # handled only by the fixed FLOOR_PRICE_NOTICE gate — never a populated value.
 NEVER_POPULATE = {"floor price"}
 
+# A trailing parenthetical that is ONLY a unit annotation carries no matching
+# meaning: "Diameter (mm)" denotes the same field as "Diameter". A parenthetical
+# that is not a unit — an index like "Dimensions (1)" — is part of the real field
+# name and is preserved. (Real pages also wrap names as "<Grade>"; those angle
+# brackets are extraction artefacts and are stripped too.)
+_UNIT_PAREN_RE = re.compile(
+    r"\s*\((?:mm|cm|m|meter|meters|metre|metres|in|inch|inches|ft|kg|g|mpa|%)\)\s*$",
+    re.IGNORECASE,
+)
+
 
 def canonical(name: str) -> str:
     """Normalise a field name for comparison (lowercase, unify separators, synonyms)."""
-    n = re.sub(r"[\s_\-]+", " ", str(name).strip().lower())
+    n = str(name).strip().lower()
+    n = n.strip("<>").strip()  # drop extraction wrappers like <Grade>
+    n = _UNIT_PAREN_RE.sub("", n).strip()  # drop a unit-only trailing parenthetical
+    n = re.sub(r"[\s_\-]+", " ", n).strip()
     return SYNONYMS.get(n, n)
+
+
+# The scraper appends its own content-based classification as a
+# 'suggested_category' row (see programs/scraper/assemble.py). That is our own
+# annotation, not a scraped product attribute — it must never inflate the
+# denominator. This is our own field name, not a site-specific blocklist entry.
+_ANNOTATION_FIELDS = {"suggested category"}
+_URL_RE = re.compile(r"^\s*(?:https?://|www\.)", re.IGNORECASE)
+_EMAIL_RE = re.compile(r"^\s*[^@\s]+@[^@\s]+\.[^@\s]+\s*$")
+
+
+def _is_candidate_attribute(name: str, value: object) -> bool:
+    """Could this evidence field plausibly be a product spec attribute at all?
+
+    A deterministic, explainable pre-filter — no ML, no fuzzy matching, no
+    site-specific field-name blocklist. It removes only what is structurally not
+    a spec attribute: our own 'suggested_category' annotation, and fields whose
+    value is a bare URL or email (media / contact references). A genuine
+    attribute is never dropped for being prose — Description is itself a schema
+    field — so the filter keys off structure, not verbosity.
+    """
+    if canonical(name) in _ANNOTATION_FIELDS:
+        return False
+    text = "" if value is None else str(value)
+    return not (_URL_RE.match(text) or _EMAIL_RE.match(text))
 
 
 def writable_fields(schema) -> list:
@@ -52,17 +90,27 @@ def _writable_names(schema) -> list[str]:
 
 
 def _evidence_field_map(bkpack_evidence) -> dict[str, str]:
-    """Distinct evidence fields (canonical) mapped to a representative value.
+    """Distinct candidate-attribute evidence fields (canonical) -> a value.
 
-    The value is kept so field-name ALIASES that are only valid for certain value
-    shapes (e.g. 'Dimensions' -> Diameter only for a single length measure) can be
-    resolved per-schema in _score.
+    Fields that structurally cannot be a product spec attribute (our own
+    'suggested_category' annotation, bare URL/email references) are excluded from
+    BOTH numerator and denominator via _is_candidate_attribute — they never
+    matched a schema field, they only inflated the denominator. The value is kept
+    so field-name ALIASES that are only valid for certain value shapes (e.g.
+    'Dimensions' -> Diameter only for a single length measure) can be resolved
+    per-schema in _score.
     """
     seen: dict[str, str] = {}
     for row in bkpack_evidence:
         name = row.get("field")
-        if name and canonical(name) not in seen:
-            seen[canonical(name)] = row.get("value")
+        if not name:
+            continue
+        value = row.get("value")
+        if not _is_candidate_attribute(name, value):
+            continue
+        c = canonical(name)
+        if c not in seen:
+            seen[c] = value
     return seen
 
 
@@ -88,11 +136,13 @@ def _score(evidence_map: dict, schema) -> tuple[float, list[str]]:
 def match_template(bkpack_evidence, schemas):
     """Return (best_schema | None, confidence, all_candidates_scored).
 
-    Score = proportion of the evidence's distinct field names that map to a
-    schema writable field (directly or via a category-aware field-name alias).
-    The best schema is returned only if its score meets MATCH_THRESHOLD; otherwise
-    None (with the sub-threshold confidence). All candidates are always returned,
-    sorted best-first, so a human can see what else was close.
+    Score = proportion of the evidence's distinct candidate-attribute field names
+    (see _is_candidate_attribute) that map to a schema writable field — directly,
+    via canonicalization of decorated names ("<Diameter (mm)>" -> diameter), or
+    via a category-aware field-name alias. The best schema is returned only if its
+    score meets MATCH_THRESHOLD; otherwise None (with the sub-threshold
+    confidence). All candidates are always returned, sorted best-first, so a human
+    can see what else was close.
     """
     evidence_map = _evidence_field_map(bkpack_evidence)
     scored = []

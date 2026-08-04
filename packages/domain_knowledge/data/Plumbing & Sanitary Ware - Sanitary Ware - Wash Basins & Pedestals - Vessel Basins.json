@@ -1,0 +1,69 @@
+{
+  "category_path": [
+    "Plumbing & Sanitary Ware",
+    "Sanitary Ware",
+    "Wash Basins & Pedestals",
+    "Vessel Basins"
+  ],
+  "plausible_ranges": {
+    "Drain Size": {
+      "min": 32.0,
+      "max": 40.0,
+      "unit": "mm",
+      "source_url": "https://apmi.uk/blogs/news/32mm-40mm-waste-pipe-basin-bath-shower-drainage-uk-plumbers"
+    },
+    "Dimensions (1)": {
+      "min": 100.0,
+      "max": 500.0,
+      "unit": "mm",
+      "source_url": "https://www.beautifulhomes.asianpaints.com/interior-design-services/blogs/guide-to-wash-basin-dimensions.html"
+    },
+    "Dimensions (2)": {
+      "min": 100.0,
+      "max": 500.0,
+      "unit": "mm",
+      "source_url": "https://www.beautifulhomes.asianpaints.com/interior-design-services/blogs/guide-to-wash-basin-dimensions.html"
+    },
+    "Dimensions (3)": {
+      "min": 100.0,
+      "max": 500.0,
+      "unit": "mm",
+      "source_url": "https://www.beautifulhomes.asianpaints.com/interior-design-services/blogs/guide-to-wash-basin-dimensions.html"
+    }
+  },
+  "standards": [
+    {
+      "name": "IS 2556 (Part 4):2004",
+      "description": "Bureau of Indian Standards - Vitreous Sanitary Appliances (Vitreous China), Part 4: Specific Requirements of Wash Basins. Prescribes nominal dimensions with tolerances and test requirements for vitreous-china wash basins. A genuine governing standard.",
+      "source_url": "https://law.resource.org/pub/in/bis/S03/is.2556.4.2004.pdf"
+    }
+  ],
+  "terminology": {
+    "Vessel Sink": {
+      "canonical_term": "Vessel Basin - an above-counter basin that sits on top of the countertop (Installation Type: Vessel)",
+      "source_url": "https://karran.com/vc-402-valera-19-inch-vitreous-china-bathroom-vessel-sink-in-white-ceramic-one-faucet-hole-with-overflow-drain.html"
+    },
+    "Above-Counter Basin": {
+      "canonical_term": "Vessel Basin (Installation Type: Vessel)",
+      "source_url": "https://www.periodbath.com/square-vitreous-china-drop-in-or-undermount-sink-basin.html"
+    },
+    "Vitreous China": {
+      "canonical_term": "Ceramic/Vitreous China (Material)",
+      "source_url": "https://www.mansfieldplumbing.com/product/enso-round-vitreous-china-counter-vessel/"
+    }
+  },
+  "researched_at": "2026-08-04T09:27:40.472271+00:00",
+  "review_status": "pending_review",
+  "industry_references": [
+    {
+      "name": "Karran VC-402 Valera vitreous china vessel sink (manufacturer spec)",
+      "description": "19 in vitreous-china above-counter vessel sink, single faucet hole, with overflow drain. Manufacturer product spec, not a governing standard.",
+      "source_url": "https://karran.com/vc-402-valera-19-inch-vitreous-china-bathroom-vessel-sink-in-white-ceramic-one-faucet-hole-with-overflow-drain.html"
+    },
+    {
+      "name": "Mansfield Enso round vitreous china counter vessel (manufacturer spec)",
+      "description": "Round vitreous-china above-counter (vessel) wash basin. Manufacturer product spec, not a governing standard.",
+      "source_url": "https://www.mansfieldplumbing.com/product/enso-round-vitreous-china-counter-vessel/"
+    }
+  ]
+}
