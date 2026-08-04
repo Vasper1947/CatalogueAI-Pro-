@@ -37,6 +37,7 @@ testpaths = [
     "programs/pdfworker/tests",
     "programs/engine/tests",
     "packages/schemas/tests",
+    "packages/domain_knowledge/tests",
 ]
 
 [tool.ruff]
