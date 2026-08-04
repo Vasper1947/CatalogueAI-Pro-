@@ -1,0 +1,49 @@
+{
+  "category_path": [
+    "Floor & Wall Finishes",
+    "Tile Accessories",
+    "Edge Trims & Profiles"
+  ],
+  "plausible_ranges": {
+    "Size": {
+      "min": 2.4,
+      "max": 25.4,
+      "unit": "mm",
+      "source_url": "https://www.masterwholesale.com/schluter-schiene-l-angle-tile-edging-trim.html"
+    },
+    "Length": {
+      "min": 2.44,
+      "max": 3.0,
+      "unit": "m",
+      "source_url": "https://www.alutiletrim.com/product-detail/aluminum-tile-trim/"
+    }
+  },
+  "standards": [
+    {
+      "name": "Manufacturer reference: Schluter-JOLLY profile",
+      "description": "Wall tile edge / outside-corner protection profile, 90 degree angle, heights 3-12.5 mm (1/8-1/2 in), standard length 2.5 m (8 ft 2-1/2 in); materials incl. anodized & colour-coated aluminium, chrome-plated solid brass, stainless steel. Not a regulatory standard - a manufacturer spec used as a reference.",
+      "source_url": "https://www.schluter.com/schluter-us/en_US/Profiles/For-Walls/Edging-&-Outside-Wall-Corners/Schluter%C2%AE-JOLLY/p/JOLLY"
+    },
+    {
+      "name": "Manufacturer reference: Schluter-SCHIENE profile",
+      "description": "L-angle edging profile, 87 degree angle; aluminium heights from 3/32 in (~2.4 mm) to 1 in (25.4 mm); integrated joint spacer in sizes above 1/4 in (6 mm). Manufacturer spec, not a regulatory standard.",
+      "source_url": "https://www.masterwholesale.com/schluter-schiene-l-angle-tile-edging-trim.html"
+    }
+  ],
+  "terminology": {
+    "Jolly": {
+      "canonical_term": "Rounded/bevelled tile edge trim (Profile Shape: Round Edge)",
+      "source_url": "https://www.schluter.com/schluter-us/en_US/Profiles/For-Walls/Edging-&-Outside-Wall-Corners/Schluter%C2%AE-JOLLY/p/JOLLY"
+    },
+    "Quadec": {
+      "canonical_term": "Square-edge tile finishing/corner profile (Profile Shape: Square Edge)",
+      "source_url": "https://www.masterwholesale.com/hardware/schluter-trim-profiles-edge-transition/schluter-quadec.html"
+    },
+    "Schiene": {
+      "canonical_term": "L-angle tile edging profile (Profile Shape: L-Shape)",
+      "source_url": "https://www.schluter.com/schluter-us/en_US/Profiles/For-Floors/Same-height-Transitions/Schluter%C2%AE-SCHIENE/p/SCHIENE"
+    }
+  },
+  "researched_at": "2026-08-04T05:15:29.345902+00:00",
+  "review_status": "pending_review"
+}

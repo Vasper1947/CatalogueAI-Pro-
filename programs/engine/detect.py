@@ -10,6 +10,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from schemas.aliases import resolve_field
+
 MATCH_THRESHOLD = 0.5  # named + tunable: below this there is no confident match
 
 # Small, explicit synonym map (value = canonical form). Whole-name only.
@@ -49,36 +51,53 @@ def _writable_names(schema) -> list[str]:
     return [f["name"] for f in writable_fields(schema)]
 
 
-def _evidence_field_names(bkpack_evidence) -> list[str]:
-    """Distinct evidence field names, deduped by canonical form (original kept)."""
+def _evidence_field_map(bkpack_evidence) -> dict[str, str]:
+    """Distinct evidence fields (canonical) mapped to a representative value.
+
+    The value is kept so field-name ALIASES that are only valid for certain value
+    shapes (e.g. 'Dimensions' -> Diameter only for a single length measure) can be
+    resolved per-schema in _score.
+    """
     seen: dict[str, str] = {}
     for row in bkpack_evidence:
         name = row.get("field")
-        if name:
-            seen.setdefault(canonical(name), name)
-    return list(seen.values())
+        if name and canonical(name) not in seen:
+            seen[canonical(name)] = row.get("value")
+    return seen
 
 
-def _score(evidence_canon: set[str], schema) -> tuple[float, list[str]]:
+def _score(evidence_map: dict, schema) -> tuple[float, list[str]]:
     writable_canon = {canonical(n): n for n in _writable_names(schema)}
-    matched = [writable_canon[c] for c in evidence_canon if c in writable_canon]
-    score = len(matched) / len(evidence_canon) if evidence_canon else 0.0
-    return score, matched
+    available = set(writable_canon.values())  # this schema's own field names
+    matched_count = 0
+    matched_fields: list[str] = []
+    for base_canon, value in evidence_map.items():
+        target = base_canon
+        if base_canon not in writable_canon:
+            # Resolve field-name aliases toward THIS schema's own fields only.
+            target = canonical(resolve_field(base_canon, value, available_fields=available))
+        if target in writable_canon:
+            matched_count += 1
+            field_name = writable_canon[target]
+            if field_name not in matched_fields:
+                matched_fields.append(field_name)
+    score = matched_count / len(evidence_map) if evidence_map else 0.0
+    return score, matched_fields
 
 
 def match_template(bkpack_evidence, schemas):
     """Return (best_schema | None, confidence, all_candidates_scored).
 
     Score = proportion of the evidence's distinct field names that map to a
-    schema writable field. The best schema is returned only if its score meets
-    MATCH_THRESHOLD; otherwise None (with the sub-threshold confidence). All
-    candidates are always returned, sorted best-first, so a human can see what
-    else was close.
+    schema writable field (directly or via a category-aware field-name alias).
+    The best schema is returned only if its score meets MATCH_THRESHOLD; otherwise
+    None (with the sub-threshold confidence). All candidates are always returned,
+    sorted best-first, so a human can see what else was close.
     """
-    evidence_canon = {canonical(n) for n in _evidence_field_names(bkpack_evidence)}
+    evidence_map = _evidence_field_map(bkpack_evidence)
     scored = []
     for schema in schemas:
-        score, matched = _score(evidence_canon, schema)
+        score, matched = _score(evidence_map, schema)
         scored.append((schema, score, matched))
     scored.sort(key=lambda t: t[1], reverse=True)
 

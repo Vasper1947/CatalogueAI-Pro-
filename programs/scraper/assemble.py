@@ -15,6 +15,7 @@ from bkpack.evidence import EvidenceRow
 from bkpack.writer import build_bkpack
 from domain_knowledge.check import check_plausibility
 from domain_knowledge.store import find_knowledge
+from schemas.aliases import resolve_field
 from schemas.classify import (
     CLASSIFY_THRESHOLD,
     classify_category,
@@ -229,12 +230,16 @@ def plausibility_checks(field_values, knowledge) -> list[dict]:
     only a flag for a human / Program 3 — it changes no value anywhere.
     """
     ranges = getattr(knowledge, "plausible_ranges", None) or {}
+    available = set(ranges)
     results: list[dict] = []
     for field_name, value in field_values:
-        verdict = check_plausibility(field_name, value, knowledge)
+        # A field-name alias (e.g. a Diameter value keyed "Size") resolves to the
+        # researched field before lookup; the observed name is still reported.
+        resolved = resolve_field(field_name, value, available_fields=available)
+        verdict = check_plausibility(resolved, value, knowledge)
         source = None
         if verdict in ("plausible", "implausible"):
-            entry = ranges.get(field_name)
+            entry = ranges.get(resolved)
             source = getattr(entry, "source_url", None) if entry is not None else None
         results.append(
             {"field": field_name, "value": str(value), "verdict": verdict, "source": source}
