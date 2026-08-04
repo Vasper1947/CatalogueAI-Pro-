@@ -8,7 +8,7 @@ a weak, honest score is better than a clever wrong guess.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from schemas.aliases import resolve_field
 
@@ -81,12 +81,25 @@ def writable_fields(schema) -> list:
 @dataclass
 class Candidate:
     category_path: list
-    score: float
+    score: float  # precision: matched evidence fields / distinct evidence fields
     matched_fields: list
+    # recall: required (writable) fields covered / required (writable) fields.
+    # Reported for transparency; it does NOT drive the match decision (see
+    # match_template). required_present / required_missing name the exact fields.
+    recall: float = 0.0
+    required_present: list = field(default_factory=list)
+    required_missing: list = field(default_factory=list)
 
 
 def _writable_names(schema) -> list[str]:
     return [f["name"] for f in writable_fields(schema)]
+
+
+def _required_writable_names(schema) -> list[str]:
+    """Required fields a human/evidence must supply: the schema's own ``required``
+    flag intersected with writable fields. Locked/formula required fields auto-fill
+    and can never be evidence-matched, so they are not counted as recall gaps."""
+    return [f["name"] for f in writable_fields(schema) if f.get("required")]
 
 
 def _evidence_field_map(bkpack_evidence) -> dict[str, str]:
@@ -114,7 +127,14 @@ def _evidence_field_map(bkpack_evidence) -> dict[str, str]:
     return seen
 
 
-def _score(evidence_map: dict, schema) -> tuple[float, list[str]]:
+def _score(evidence_map: dict, schema):
+    """Return (precision, recall, matched_fields, required_present, required_missing).
+
+    precision — proportion of distinct evidence fields that map to a writable
+    schema field (unchanged; this is what the match decision uses).
+    recall — proportion of the schema's required (writable) fields that the
+    evidence covers. Reported only; it does not affect the decision.
+    """
     writable_canon = {canonical(n): n for n in _writable_names(schema)}
     available = set(writable_canon.values())  # this schema's own field names
     matched_count = 0
@@ -129,8 +149,15 @@ def _score(evidence_map: dict, schema) -> tuple[float, list[str]]:
             field_name = writable_canon[target]
             if field_name not in matched_fields:
                 matched_fields.append(field_name)
-    score = matched_count / len(evidence_map) if evidence_map else 0.0
-    return score, matched_fields
+    precision = matched_count / len(evidence_map) if evidence_map else 0.0
+
+    required = _required_writable_names(schema)
+    matched_set = set(matched_fields)
+    required_present = [r for r in required if r in matched_set]
+    required_missing = [r for r in required if r not in matched_set]
+    # Convention: a schema with no required fields has no recall denominator -> 0.0.
+    recall = len(required_present) / len(required) if required else 0.0
+    return precision, recall, matched_fields, required_present, required_missing
 
 
 def match_template(bkpack_evidence, schemas):
@@ -141,22 +168,31 @@ def match_template(bkpack_evidence, schemas):
     via canonicalization of decorated names ("<Diameter (mm)>" -> diameter), or
     via a category-aware field-name alias. The best schema is returned only if its
     score meets MATCH_THRESHOLD; otherwise None (with the sub-threshold
-    confidence). All candidates are always returned, sorted best-first, so a human
+    confidence). Every candidate also carries a recall score (required-field
+    coverage) for transparency — recall does NOT change this decision. All
+    candidates are always returned, sorted best-first (by precision), so a human
     can see what else was close.
     """
     evidence_map = _evidence_field_map(bkpack_evidence)
     scored = []
     for schema in schemas:
-        score, matched = _score(evidence_map, schema)
-        scored.append((schema, score, matched))
+        precision, recall, matched, req_present, req_missing = _score(evidence_map, schema)
+        scored.append((schema, precision, recall, matched, req_present, req_missing))
+    # Sort by precision only — the match decision is unchanged.
     scored.sort(key=lambda t: t[1], reverse=True)
 
     candidates = [
-        Candidate(category_path=s.get("category_path", []), score=sc, matched_fields=m)
-        for s, sc, m in scored
+        Candidate(
+            category_path=s.get("category_path", []),
+            score=precision,
+            matched_fields=matched,
+            recall=recall,
+            required_present=req_present,
+            required_missing=req_missing,
+        )
+        for s, precision, recall, matched, req_present, req_missing in scored
     ]
     if scored and scored[0][1] >= MATCH_THRESHOLD:
-        best_schema, best_score, _ = scored[0]
-        return best_schema, best_score, candidates
+        return scored[0][0], scored[0][1], candidates
     confidence = scored[0][1] if scored else 0.0
     return None, confidence, candidates

@@ -45,9 +45,9 @@ def test_fresh_sanitary_ware_knowledge_starts_pending_review():
     assert [s.name for s in k.industry_references] == ["Karran spec"]
 
 
-def test_stored_vessel_basins_research_is_sourced_and_pending():
+def test_stored_vessel_basins_research_is_sourced_and_confirmed():
     k = load_knowledge(VESSEL_PATH)
-    assert k.review_status == "pending_review"
+    assert k.review_status == "confirmed"  # promoted by the user this task
     # regulatory standard under standards; manufacturer specs under references
     assert any("IS 2556" in s.name for s in k.standards)
     assert k.industry_references and all(

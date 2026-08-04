@@ -76,3 +76,30 @@ Program 2 (field app).
 available** — do not build template-detection logic against a guessed
 structure. That would be the same fabrication failure as inventing catalog
 data, just applied to the template format.
+
+## Autonomy & approval policy
+
+Once a plan is approved (or the task is unambiguous), **proceed without stopping
+mid-way** as long as every step satisfies all of these:
+
+- it stays within the task's **stated scope**;
+- it touches **no file marked locked** (see "Locked dependency" above and any
+  per-task locks) without explicit authorization for that specific file;
+- it does **not lower a threshold, weaken a gate, or force a match/result to
+  pass** — a weak honest result is reported, never massaged into a pass;
+- it is **reversible via git** (committed history or recoverable working tree).
+
+If something useful is **beyond the literal scope but still reversible**, do it
+and **flag it clearly in the report** rather than stopping for it — unless it is
+genuinely irreversible, in which case stop first.
+
+**Always stop and ask** — no exceptions — for:
+
+- **Promoting domain-knowledge `review_status` from `pending_review` to
+  `confirmed`.** That judgement is the user's alone, per category, every time.
+- **Anything that spends money or publishes/deploys externally** (sending data
+  to an external service, deploying, posting, opening/merging PRs).
+- **Anything that deletes or overwrites data without a git-recoverable path.**
+
+When in doubt, prefer doing the reversible work and reporting it over stopping;
+but never trade away one of the "always stop" items for momentum.
