@@ -1,0 +1,56 @@
+{
+  "category_path": [
+    "Building Materials",
+    "Steel & Reinforcements",
+    "High Yield Steel Bars (TMT bars)",
+    "12mm"
+  ],
+  "plausible_ranges": {
+    "Diameter": {
+      "min": 6.0,
+      "max": 40.0,
+      "unit": "mm",
+      "source_url": "https://www.jswneosteel.in/build/tmt-bars-bis-specifications.aspx"
+    },
+    "Length": {
+      "min": 6.0,
+      "max": 18.0,
+      "unit": "m",
+      "source_url": "https://www.tatanexarc.com/steel/tmt-bars/tmt-bar-length-options-in-market/"
+    },
+    "Grade": {
+      "min": 415.0,
+      "max": 600.0,
+      "unit": "MPa (grade number = minimum yield strength)",
+      "source_url": "https://www.vizagsteel.com/code/products/rebars.pdf"
+    }
+  },
+  "standards": [
+    {
+      "name": "IS 1786:2008",
+      "description": "BIS standard for high strength deformed steel bars and wires for concrete reinforcement. Defines TMT/HYSD grades Fe415, Fe500, Fe550, Fe600 (and Fe500D/Fe500SD); the grade number is the minimum yield strength in MPa.",
+      "source_url": "https://www.vizagsteel.com/code/products/rebars.pdf"
+    },
+    {
+      "name": "IS 1786 nominal sizes (BIS TMT specifications)",
+      "description": "Manufacturer summary of BIS IS 1786 mechanical properties and nominal bar diameters (6-40 mm) for TMT reinforcement bars.",
+      "source_url": "https://www.jswneosteel.in/build/tmt-bars-bis-specifications.aspx"
+    }
+  ],
+  "terminology": {
+    "TMT": {
+      "canonical_term": "Thermo-Mechanically Treated bar",
+      "source_url": "https://civilsir.com/tmt-steel-bars-grade-fe415-fe500-fe550-fe600-fe500d-fe500sd/"
+    },
+    "HYSD": {
+      "canonical_term": "High Yield Strength Deformed bar",
+      "source_url": "https://www.jswneosteel.in/build/tmt-bars-bis-specifications.aspx"
+    },
+    "Fe500": {
+      "canonical_term": "IS 1786 grade, 500 MPa minimum yield strength (Fe = iron; number = MPa)",
+      "source_url": "https://www.vizagsteel.com/code/products/rebars.pdf"
+    }
+  },
+  "researched_at": "2026-08-04T04:16:05.277730+00:00",
+  "review_status": "confirmed"
+}

@@ -13,6 +13,8 @@ from urllib.parse import urlparse
 
 from bkpack.evidence import EvidenceRow
 from bkpack.writer import build_bkpack
+from domain_knowledge.check import check_plausibility
+from domain_knowledge.store import find_knowledge
 from schemas.classify import (
     CLASSIFY_THRESHOLD,
     classify_category,
@@ -82,6 +84,30 @@ def to_evidence_rows(
     return rows
 
 
+def _top_category_suggestion(fields: dict, schemas: list | None):
+    """The tie-resolved top category for a product, or None below threshold.
+
+    Shared by the suggested_category row and the plausibility lookup.
+    """
+    product_text = " ".join(
+        str(fields[key]) for key in ("name", "description") if fields.get(key)
+    ).strip()
+    if not product_text:
+        return None
+    if schemas is None:
+        schemas = _cached_schemas()
+    if not schemas:
+        return None
+    suggestion = top_suggestion(classify_category(product_text, schemas))
+    if (
+        suggestion is None
+        or suggestion.score < CLASSIFY_THRESHOLD
+        or not suggestion.category_path
+    ):
+        return None
+    return suggestion
+
+
 def classification_rows(
     fields: dict, page_url: str, *, schemas: list | None = None
 ) -> list[EvidenceRow]:
@@ -94,22 +120,8 @@ def classification_rows(
     the top score, the value is their shared family prefix, not an arbitrary leaf.
     No existing field's row is touched.
     """
-    product_text = " ".join(
-        str(fields[key]) for key in ("name", "description") if fields.get(key)
-    ).strip()
-    if not product_text:
-        return []
-    if schemas is None:
-        schemas = _cached_schemas()
-    if not schemas:
-        return []
-
-    suggestion = top_suggestion(classify_category(product_text, schemas))
-    if (
-        suggestion is None
-        or suggestion.score < CLASSIFY_THRESHOLD
-        or not suggestion.category_path
-    ):
+    suggestion = _top_category_suggestion(fields, schemas)
+    if suggestion is None:
         return []
     return [
         EvidenceRow(
@@ -206,3 +218,73 @@ def build_pack_from_fields(
         producer=PRODUCER,
     )
     return rows
+
+
+def plausibility_checks(field_values, knowledge) -> list[dict]:
+    """Flag each (field, value) against domain knowledge — a PARALLEL structure.
+
+    Returns one {field, value, verdict, source} per input. It never touches,
+    reorders, or drops any EvidenceRow, and is never written into the BK-PACK.
+    ``knowledge=None`` -> every verdict is "unknown". An "implausible" verdict is
+    only a flag for a human / Program 3 — it changes no value anywhere.
+    """
+    ranges = getattr(knowledge, "plausible_ranges", None) or {}
+    results: list[dict] = []
+    for field_name, value in field_values:
+        verdict = check_plausibility(field_name, value, knowledge)
+        source = None
+        if verdict in ("plausible", "implausible"):
+            entry = ranges.get(field_name)
+            source = getattr(entry, "source_url", None) if entry is not None else None
+        results.append(
+            {"field": field_name, "value": str(value), "verdict": verdict, "source": source}
+        )
+    return results
+
+
+def _confirmed_knowledge(category_path, data_dir):
+    """Domain knowledge for a category, but only if a human has confirmed it."""
+    knowledge = (
+        find_knowledge(category_path)
+        if data_dir is None
+        else find_knowledge(category_path, data_dir)
+    )
+    if knowledge is None or getattr(knowledge, "review_status", None) != "confirmed":
+        return None
+    return knowledge
+
+
+def plausibility_report(
+    fields: dict,
+    page_url: str,
+    *,
+    page_html: str | None = None,
+    schemas: list | None = None,
+    data_dir=None,
+) -> list[dict]:
+    """Parallel plausibility flags for a page's extracted fields.
+
+    Classifies the product, looks up CONFIRMED domain knowledge for that category
+    (a family/leaf prefix match is allowed), and flags each extracted field —
+    from the JSON-LD fields and the spec table. A category with no confirmed
+    knowledge (509 of 510 today) yields "unknown" for every field, silently, not
+    an error. EvidenceRows are never touched; this list is entirely separate.
+    """
+    suggestion = _top_category_suggestion(fields, schemas)
+    knowledge = (
+        _confirmed_knowledge(suggestion.category_path, data_dir) if suggestion else None
+    )
+
+    field_values: list[tuple[str, str]] = []
+    for field_name, value in fields.items():
+        if value is not None and str(value).strip():
+            field_values.append((field_name, str(value)))
+    if page_html:
+        for key, raw in extract_spec_table(page_html):
+            field_name = _clean_key(key)
+            normalized, unit, _ = normalize_value(raw)
+            value = _format_value(normalized, unit)
+            if field_name and value.strip():
+                field_values.append((field_name, value))
+
+    return plausibility_checks(field_values, knowledge)

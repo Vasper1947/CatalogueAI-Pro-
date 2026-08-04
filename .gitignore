@@ -52,5 +52,6 @@ sample.bkpack.zip
 # Generated schema store (parsed from the user's private ~510 templates)
 packages/schemas/data/
 
-# Researched domain-knowledge store (pending human review)
-packages/domain_knowledge/data/
+# NOTE: packages/domain_knowledge/data/ is intentionally tracked — it is small,
+# public, source-attributed, human-reviewed infrastructure (unlike the private
+# template schemas above).
