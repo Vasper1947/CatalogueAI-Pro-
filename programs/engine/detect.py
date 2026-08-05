@@ -10,9 +10,9 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+from common.units import normalize_value
 from schemas.aliases import resolve_field
 from schemas.sections import is_commercial_construct
-from scraper.units import normalize_value
 
 MATCH_THRESHOLD = 0.5  # named + tunable: below this there is no confident match
 

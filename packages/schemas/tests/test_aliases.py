@@ -34,10 +34,13 @@ def test_universal_manufacturer_and_colour():
     assert resolve_field("Colour", "Silver", available_fields={"Color"}) == "Color"
 
 
-def test_edge_trims_height_resolves_to_size_only_when_single_measure():
+def test_edge_trims_height_resolves_to_size_for_single_axis_length():
     assert resolve_field("Height", "10mm", available_fields={"Size", "Length"}) == "Size"
-    # Categorical multi-option height stays unresolved.
-    assert resolve_field("Height", "8/10/12mm", available_fields={"Size", "Length"}) == "Height"
+    # A same-axis option list (real supplier pages state size this way, e.g. TBK
+    # Metal Edge Trim 'Height: 8/10/12mm') is one axis -> resolves to Size.
+    assert resolve_field("Height", "8/10/12mm", available_fields={"Size", "Length"}) == "Size"
+    # A multi-axis value is NOT a Size.
+    assert resolve_field("Height", "8 x 10 mm", available_fields={"Size", "Length"}) == "Height"
 
 
 def test_edge_trims_overall_length_resolves_to_length():

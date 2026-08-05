@@ -18,5 +18,15 @@
     "file": "Plumbing & Sanitary Ware - Plumbing Materials - Pipes & Fittings - PVC.json",
     "review_status": "pending_review",
     "researched_at": "2026-08-04T10:17:03.026494+00:00"
+  },
+  "Plumbing & Sanitary Ware > Plumbing Materials > Pipes & Fittings > GI": {
+    "file": "Plumbing & Sanitary Ware - Plumbing Materials - Pipes & Fittings - GI.json",
+    "review_status": "pending_review",
+    "researched_at": "2026-08-05T05:31:33.684681+00:00"
+  },
+  "Electrical & Lighting > Electrical Supplies > Cables & Wires > Copper Wires": {
+    "file": "Electrical & Lighting - Electrical Supplies - Cables & Wires - Copper Wires.json",
+    "review_status": "pending_review",
+    "researched_at": "2026-08-05T05:33:59.758368+00:00"
   }
 }

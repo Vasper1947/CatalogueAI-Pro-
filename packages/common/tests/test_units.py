@@ -1,6 +1,6 @@
 """Unit-normalization tests: conversions, decimals, dimensions, ambiguity."""
 
-from scraper.units import normalize_value
+from common.units import normalize_value
 
 
 def test_mm_value_normalizes_confidently():

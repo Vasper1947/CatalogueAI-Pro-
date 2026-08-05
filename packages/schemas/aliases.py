@@ -7,10 +7,11 @@ fields (Size, Length) — mirroring domain_knowledge's one-category-at-a-time
 discipline.
 
 Some aliases are value-conditional via an ``applies_when`` guard evaluated
-against the field's value. In particular "Dimensions" is a Diameter ONLY when it
-is a single length measure (one number + an mm/cm/inch unit, and no "x"/"×"
-separator); a multi-axis "300 x 600 mm" is a footprint, not a diameter, and is
-NOT aliased.
+against the field's value. In particular "Dimensions"/"Height" resolve ONLY when
+the value is a single-axis length — one value, or a same-axis option list like
+"8/10/12mm" (how supplier pages often state a trim's size), with an mm/cm/inch
+unit and no "x"/"×" separator. A multi-axis "300 x 600 mm" is a footprint, not a
+single dimension, and is NOT aliased.
 
 Aliases are also category-aware: ``resolve_field`` only rewrites an observed name
 to a canonical field that the target schema/category actually has (via
@@ -29,10 +30,10 @@ FIELD_ALIASES: dict[str, list[dict]] = {
         {"alias": "Size", "applies_when": None,
          "reasoning": "For round-profile items (bars, rods, round trims) the single "
                       "'Size' figure is the nominal diameter."},
-        {"alias": "Dimensions", "applies_when": "single_length_measure",
-         "reasoning": "'Dimensions' is a diameter ONLY when it is one length measure "
-                      "(a number + mm/cm/inch, no x/×). A multi-axis '300 x 600 mm' "
-                      "is a footprint, not a diameter, so it is not aliased."},
+        {"alias": "Dimensions", "applies_when": "single_axis_length",
+         "reasoning": "'Dimensions' is a diameter ONLY when it is a single-axis length "
+                      "(one value, or same-axis options like '12/16mm'; a number + "
+                      "mm/cm/inch, no x/×). A multi-axis '300 x 600 mm' is a footprint."},
         {"alias": "Dia", "applies_when": None,
          "reasoning": "Common trade abbreviation of Diameter."},
     ],
@@ -63,23 +64,26 @@ FIELD_ALIASES: dict[str, list[dict]] = {
     ],
     # --- Edge Trims & Profiles (the schema's own fields are 'Size' and 'Length') ---
     "Size": [
-        {"alias": "Height", "applies_when": "single_length_measure",
+        {"alias": "Height", "applies_when": "single_axis_length",
          "reasoning": "A tile trim's 'Size' is its height (the tile thickness it "
-                      "caps). Only alias a genuine single measure; a categorical "
-                      "'8/10/12mm' list of options stays unresolved."},
-        {"alias": "Profile Height", "applies_when": "single_length_measure",
-         "reasoning": "'Profile Height' is the trim's Size, when one measure."},
-        {"alias": "Tile Thickness", "applies_when": "single_length_measure",
+                      "caps). Real pages state this as one measure or a same-axis "
+                      "option list ('8/10/12mm'); only a multi-axis value is not a Size."},
+        {"alias": "Profile Height", "applies_when": "single_axis_length",
+         "reasoning": "'Profile Height' is the trim's Size (a single-axis length)."},
+        {"alias": "Tile Thickness", "applies_when": "single_axis_length",
          "reasoning": "A trim is chosen by the tile thickness it caps, which is its "
-                      "Size, when stated as a single measure."},
+                      "Size (a single-axis length)."},
     ],
 }
 
 _LENGTH_UNIT = r"(?:mm|cm|millimet(?:er|re)s?|centimet(?:er|re)s?|in|inch(?:es)?|[\"″])"
 
 
-def _is_single_length_measure(value: object) -> bool:
-    """True if value is one number with an mm/cm/inch unit and no x/× separator."""
+def _is_single_axis_length(value: object) -> bool:
+    """True if value is a length along ONE axis: at least one number with an
+    mm/cm/inch unit and no x/× axis separator. Accepts a same-axis option list
+    like '8/10/12mm' (real supplier pages state a trim's size that way — e.g. TBK
+    Metal Edge Trim 'Height: 8/10/12mm'); rejects a multi-axis '300 x 600 mm'."""
     if value is None:
         return False
     text = str(value)
@@ -87,10 +91,10 @@ def _is_single_length_measure(value: object) -> bool:
         return False
     if not re.search(r"(?i)" + _LENGTH_UNIT, text):
         return False
-    return len(re.findall(r"[0-9][0-9.,]*", text)) == 1
+    return len(re.findall(r"[0-9][0-9.,]*", text)) >= 1
 
 
-_GUARDS = {"single_length_measure": _is_single_length_measure}
+_GUARDS = {"single_axis_length": _is_single_axis_length}
 
 
 def _normalize(name: object) -> str:

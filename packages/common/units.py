@@ -1,4 +1,8 @@
-"""Value normalization for scraped spec-table cells.
+"""Value normalization for spec values — shared, non-domain-specific utility.
+
+Lives in ``packages/common`` (with errors/logging) because both programs depend
+on it: the scraper (spec-table extraction) and the engine (sibling-size
+comparison in template detection) import the same ``normalize_value``.
 
     normalize_value(raw) -> (normalized_value, unit, confidence)
 

@@ -1,0 +1,67 @@
+{
+  "category_path": [
+    "Plumbing & Sanitary Ware",
+    "Plumbing Materials",
+    "Pipes & Fittings",
+    "GI"
+  ],
+  "plausible_ranges": {
+    "Nominal Diameter": {
+      "min": 15.0,
+      "max": 150.0,
+      "unit": "mm",
+      "source_url": "https://hitechsupports.com/size-chart/is-1239-steel-pipe/"
+    },
+    "Wall Thickness": {
+      "min": 2.0,
+      "max": 5.4,
+      "unit": "mm",
+      "source_url": "https://www.sachiyasteelintl.com/gi-pipe-size-weight-chart.html"
+    }
+  },
+  "standards": [
+    {
+      "name": "IS 1239 (Part 1)",
+      "description": "Bureau of Indian Standards - mild steel / galvanized-iron tubes for water, gas, air and steam. Nominal bore 15-150 mm; three wall-thickness classes (Light/A, Medium/B, Heavy/C) sharing the same OD per NB. Governing standard.",
+      "source_url": "https://megphed.gov.in/standards/GIpipes.pdf"
+    },
+    {
+      "name": "IS 1239 (Part 2)",
+      "description": "BIS - mild steel tubulars and other wrought steel pipe fittings (the fittings companion to Part 1's tubes). Governing standard.",
+      "source_url": "https://emirerristeel.com/is-1239/"
+    },
+    {
+      "name": "BS 1387:1985 / EN 10255:2004",
+      "description": "British/European standard for non-alloy steel tubes suitable for welding and threading; IS 1239 Part 1:2004 is stated equivalent. Governing standard.",
+      "source_url": "https://www.aesteiron.com/gi-pipe.html"
+    }
+  ],
+  "terminology": {
+    "GI": {
+      "canonical_term": "Galvanized Iron - zinc-coated mild steel tube (Material)",
+      "source_url": "https://baling-steel.com/the-ultimate-guide-to-gi-pipe/"
+    },
+    "NB": {
+      "canonical_term": "Nominal Bore - the pipe's nominal internal size designation in mm (Nominal Diameter)",
+      "source_url": "https://hitechsupports.com/size-chart/is-1239-steel-pipe/"
+    },
+    "Class C": {
+      "canonical_term": "IS 1239 Heavy wall-thickness class (Class A=Light, B=Medium, C=Heavy; same OD, increasing wall)",
+      "source_url": "https://emirerristeel.com/is-1239/"
+    }
+  },
+  "researched_at": "2026-08-05T05:31:33.684681+00:00",
+  "review_status": "pending_review",
+  "industry_references": [
+    {
+      "name": "Sachiya Steel GI pipe size & weight chart (IS 1239 Class A/B/C) (manufacturer)",
+      "description": "Manufacturer dimension/weight chart: NB, OD, wall thickness and mass per metre for Classes A/B/C. Manufacturer spec, not a governing standard.",
+      "source_url": "https://www.sachiyasteelintl.com/gi-pipe-size-weight-chart.html"
+    },
+    {
+      "name": "Nezone Group GI pipes technical specifications (manufacturer)",
+      "description": "Manufacturer technical specification for galvanized iron pipes. Manufacturer spec, not a governing standard.",
+      "source_url": "https://www.nezonegroup.com/galvanized-iron-pipes-technical-specifications/"
+    }
+  ]
+}

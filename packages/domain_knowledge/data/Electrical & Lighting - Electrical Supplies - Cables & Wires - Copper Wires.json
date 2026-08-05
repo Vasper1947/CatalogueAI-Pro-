@@ -1,0 +1,57 @@
+{
+  "category_path": [
+    "Electrical & Lighting",
+    "Electrical Supplies",
+    "Cables & Wires",
+    "Copper Wires"
+  ],
+  "plausible_ranges": {
+    "Size": {
+      "min": 0.5,
+      "max": 630.0,
+      "unit": "sq mm",
+      "source_url": "https://law.resource.org/pub/in/bis/S05/is.694.2010.pdf"
+    },
+    "Current Carrying Capacity": {
+      "min": 3.0,
+      "max": 400.0,
+      "unit": "A",
+      "source_url": "https://www.aesteiron.com/blog/current-carrying-capacity-of-copper-conductors/"
+    }
+  },
+  "standards": [
+    {
+      "name": "IS 694:2010",
+      "description": "Bureau of Indian Standards - PVC insulated (heavy duty) electric cables/wires for working voltages up to and including 1100 V. Electrolytic-grade copper conductor; conductor cross-sections 0.5-630 sq mm; 660 V working / 1100 V test. Governing standard.",
+      "source_url": "https://law.resource.org/pub/in/bis/S05/is.694.2010.pdf"
+    }
+  ],
+  "terminology": {
+    "sqmm": {
+      "canonical_term": "Size - conductor nominal cross-sectional area in mm2 (Size)",
+      "source_url": "https://elmeckcables.com/blog/is-694-update-2025/"
+    },
+    "Ampacity": {
+      "canonical_term": "Current Carrying Capacity - the current a conductor can carry continuously, in A (Current Carrying Capacity)",
+      "source_url": "https://www.aesteiron.com/blog/current-carrying-capacity-of-copper-conductors/"
+    },
+    "1100 V grade": {
+      "canonical_term": "Voltage Rating - 660 V working / 1100 V test grade per IS 694 (Voltage Rating)",
+      "source_url": "https://law.resource.org/pub/in/bis/S05/is.694.2010.pdf"
+    }
+  },
+  "researched_at": "2026-08-05T05:33:59.758368+00:00",
+  "review_status": "pending_review",
+  "industry_references": [
+    {
+      "name": "APAR house-wire current-rating (ampacity) chart (manufacturer)",
+      "description": "Manufacturer ampacity chart giving current ratings per conductor size for house wiring. Manufacturer reference, not a governing standard.",
+      "source_url": "https://aparwiresandcables.com/resources/house-wire-current-rating-chart/"
+    },
+    {
+      "name": "Aesteiron current carrying capacity of copper conductors (supplier)",
+      "description": "Supplier reference chart of copper conductor current-carrying capacity by size. Reference, not a governing standard.",
+      "source_url": "https://www.aesteiron.com/blog/current-carrying-capacity-of-copper-conductors/"
+    }
+  ]
+}

@@ -14,6 +14,7 @@ from urllib.parse import urlparse
 
 from bkpack.evidence import EvidenceRow
 from bkpack.writer import build_bkpack
+from common.units import normalize_value
 from domain_knowledge.check import check_plausibility
 from domain_knowledge.store import find_knowledge
 from schemas.aliases import resolve_field
@@ -25,7 +26,6 @@ from schemas.classify import (
 )
 
 from scraper.discover import extract_spec_table
-from scraper.units import normalize_value
 
 # Confidence reflects provenance / extraction path. A spec table's explicit
 # key/value rows are the highest-trust scrape signal, above schema.org JSON-LD;

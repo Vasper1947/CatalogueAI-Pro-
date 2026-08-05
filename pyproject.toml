@@ -36,6 +36,7 @@ testpaths = [
     "programs/scraper/tests",
     "programs/pdfworker/tests",
     "programs/engine/tests",
+    "packages/common/tests",
     "packages/schemas/tests",
     "packages/domain_knowledge/tests",
 ]
