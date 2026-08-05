@@ -49,11 +49,14 @@ def test_unitless_value_does_not_resolve():
 def test_match_template_breaks_top_tie_to_the_right_sibling():
     schemas = [_load_sibling(s) for s in _SIBLINGS]
     # Identical fields -> all three tie at top precision; the 12 mm diameter value
-    # resolves the tie to the 12mm sibling.
+    # resolves the tie to the 12mm sibling. Material is added (a required field
+    # common to all three siblings) so recall clears the combined decision rule's
+    # gate (see test_recall_gate.py) without disturbing the precision tie.
     evidence = [
         {"field": "Grade", "value": "Fe500"},
         {"field": "Diameter", "value": "12 mm"},
         {"field": "Length", "value": "12 m"},
+        {"field": "Material", "value": "TMT Steel"},
     ]
     best, _conf, cands = match_template(evidence, schemas)
     assert cands[0].category_path[-1] == "12mm"      # tie broken to the right one

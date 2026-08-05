@@ -1,8 +1,10 @@
-"""Recall-over-required-fields: a second, reported score (Task 2).
+"""Recall-over-required-fields: computed and reported per candidate.
 
 Recall = |matched fields that are the schema's required (writable) fields| /
-|required (writable) fields|. It is reported per candidate alongside precision;
-it does NOT change the match decision (that still runs on precision).
+|required (writable) fields|. These tests cover the NUMBER's correctness. As of
+the combined decision rule (see test_recall_gate.py), recall also gates whether
+a precision-qualifying candidate is actually accepted as the match — a schema
+that declares required fields must clear RECALL_THRESHOLD too.
 """
 
 from engine.detect import MATCH_THRESHOLD, match_template
@@ -52,10 +54,14 @@ def test_many_fields_but_few_required_scores_low_recall_decent_precision():
     best, _conf, cands = match_template(_ev("Weight", "Color", "Brand"), [schema])
     c = cands[0]
     assert c.score == 1.0                        # precision: all 3 evidence map
-    assert best is not None                      # precision clears threshold
     assert c.recall == 1 / 3                     # only 1 of 3 required present
     assert set(c.required_present) == {"Brand"}
     assert set(c.required_missing) == {"Model", "Voltage"}
+    # Precision alone would have accepted this (1.0 >= threshold); the combined
+    # decision rule (see test_recall_gate.py) correctly rejects it instead,
+    # because recall (1/3) is well below RECALL_THRESHOLD -- most of this
+    # schema's own required identity is uncovered.
+    assert best is None
 
 
 def test_no_required_fields_reports_recall_zero_by_convention():

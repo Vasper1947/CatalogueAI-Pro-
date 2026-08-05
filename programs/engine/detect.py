@@ -16,6 +16,17 @@ from schemas.sections import is_commercial_construct
 
 MATCH_THRESHOLD = 0.5  # named + tunable: below this there is no confident match
 
+# A candidate must also cover a MAJORITY of its own required fields to be
+# accepted — not just overlap superficially on precision. Grounded in the real
+# TBK Metal Edge Trim page: precision alone picked "Decorative PVC Panels"
+# (precision=0.625, but only 5 of its 18 required fields covered -> recall=
+# 0.278) over the genuinely correct "Edge Trim" (precision=0.500, 4 of 7
+# required fields covered -> recall=0.571) — a wrong, larger-vocabulary schema
+# out-scored the right one on precision by chance overlap, and recall exposed
+# it. Reuses MATCH_THRESHOLD's own "majority" bar for the second signal rather
+# than a second, independently-tuned magic number.
+RECALL_THRESHOLD = MATCH_THRESHOLD
+
 # Small, explicit synonym map (value = canonical form). Whole-name only.
 SYNONYMS = {"title": "name", "cost": "price"}
 
@@ -206,18 +217,38 @@ def resolve_sibling_tie(tied_candidates, evidence):
     return matches[0] if len(matches) == 1 else None
 
 
+def _clears_recall_gate(cand: Candidate) -> bool:
+    """True if recall doesn't disqualify this candidate from being accepted.
+
+    A schema with no required-writable fields at all has no recall denominator
+    (recall==0.0 by convention, see _score) — that is a "no data" state, not a
+    failure, so the gate is inapplicable and precision alone governs (preserves
+    prior behaviour for such schemas). A schema that DOES declare required
+    fields must have recall clear RECALL_THRESHOLD to be accepted.
+    """
+    has_required_fields = bool(cand.required_present or cand.required_missing)
+    return not has_required_fields or cand.recall >= RECALL_THRESHOLD
+
+
 def match_template(bkpack_evidence, schemas):
     """Return (best_schema | None, confidence, all_candidates_scored).
 
     Score = proportion of the evidence's distinct candidate-attribute field names
     (see _is_candidate_attribute) that map to a schema writable field — directly,
     via canonicalization of decorated names ("<Diameter (mm)>" -> diameter), or
-    via a category-aware field-name alias. The best schema is returned only if its
-    score meets MATCH_THRESHOLD; otherwise None (with the sub-threshold
-    confidence). Every candidate also carries a recall score (required-field
-    coverage) for transparency — recall does NOT change this decision. All
-    candidates are always returned, sorted best-first (by precision), so a human
-    can see what else was close.
+    via a category-aware field-name alias.
+
+    A candidate is ACCEPTED as the match only if its precision clears
+    MATCH_THRESHOLD *and* it clears the recall gate (_clears_recall_gate) —
+    precision alone is not enough, because a wrong schema with a large field
+    vocabulary can out-score the right one on precision through chance overlap
+    while covering only a sliver of its own required fields (see RECALL_THRESHOLD's
+    docstring for the real case this is grounded in). Candidates are always sorted
+    best-first BY PRECISION (with a same-precision sibling tie-break, see
+    resolve_sibling_tie) so a human can see what else was close — that order is
+    unchanged. The accepted candidate is the FIRST in that order to also clear the
+    recall gate, so a lower-precision-but-well-covered candidate can win over a
+    higher-precision-but-shallow one; it is NOT always candidates[0].
     """
     evidence_map = _evidence_field_map(bkpack_evidence)
     # Each entry pairs a Candidate with its schema so a tie-break reorder keeps
@@ -250,7 +281,10 @@ def match_template(bkpack_evidence, schemas):
                 scored.insert(0, scored.pop(j))
 
     candidates = [c for c, _s in scored]
-    if scored and scored[0][0].score >= MATCH_THRESHOLD:
-        return scored[0][1], scored[0][0].score, candidates
+    for cand, schema in scored:
+        if cand.score < MATCH_THRESHOLD:
+            break  # scored is precision-sorted descending; nothing further can qualify
+        if _clears_recall_gate(cand):
+            return schema, cand.score, candidates
     confidence = scored[0][0].score if scored else 0.0
     return None, confidence, candidates

@@ -1,5 +1,5 @@
 """GI (galvanized iron) pipe research: a second Plumbing sub-category with
-genuinely different standards than PVC. Grounded, sourced, pending_review.
+genuinely different standards than PVC. Grounded, sourced; confirmed by the user.
 """
 
 from domain_knowledge.research import research_category
@@ -31,9 +31,9 @@ def test_fresh_gi_knowledge_starts_pending_review():
     assert [s.name for s in k.industry_references] == ["Sachiya chart"]
 
 
-def test_stored_gi_research_is_sourced_and_pending_with_different_standards_than_pvc():
+def test_stored_gi_research_is_sourced_and_confirmed_with_different_standards_than_pvc():
     gi = load_knowledge(GI_PATH)
-    assert gi.review_status == "pending_review"
+    assert gi.review_status == "confirmed"  # promoted by the user
     assert any("IS 1239" in s.name for s in gi.standards)   # metal-pipe standard
     # genuinely different from PVC's governing standard
     pvc = load_knowledge(["Plumbing & Sanitary Ware", "Plumbing Materials", "Pipes & Fittings", "PVC"])

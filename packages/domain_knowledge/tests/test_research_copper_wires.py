@@ -1,4 +1,4 @@
-"""Electrical & Lighting - Copper Wires research: grounded, sourced, pending_review."""
+"""Electrical & Lighting - Copper Wires research: grounded, sourced; confirmed by the user."""
 
 from domain_knowledge.research import research_category
 from domain_knowledge.store import load_knowledge
@@ -33,9 +33,9 @@ def test_fresh_copper_wires_knowledge_starts_pending_review():
     assert [s.name for s in k.industry_references] == ["APAR chart"]
 
 
-def test_stored_copper_wires_research_is_sourced_and_pending():
+def test_stored_copper_wires_research_is_sourced_and_confirmed():
     k = load_knowledge(COPPER_PATH)
-    assert k.review_status == "pending_review"          # reserved for the user
+    assert k.review_status == "confirmed"          # promoted by the user
     assert any("IS 694" in s.name for s in k.standards)  # governing wiring standard
     assert k.industry_references and all(
         s.source_url.startswith("http") for s in k.industry_references
