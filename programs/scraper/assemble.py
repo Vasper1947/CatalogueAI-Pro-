@@ -17,6 +17,7 @@ from bkpack.writer import build_bkpack
 from common.units import normalize_value
 from domain_knowledge.check import check_plausibility
 from domain_knowledge.store import find_knowledge
+from export.staging import stage_capture
 from schemas.aliases import resolve_field
 from schemas.classify import (
     CLASSIFY_THRESHOLD,
@@ -274,6 +275,9 @@ def build_pack_from_fields(
     structured: bool = True,
     schemas: list | None = None,
     page_html: str | None = None,
+    job_id: str | None = None,
+    staging_root=None,
+    image_bytes_list: list[bytes] | None = None,
 ) -> list[EvidenceRow]:
     """Build a BK-PACK at output_path from one page's discovered fields.
 
@@ -282,6 +286,14 @@ def build_pack_from_fields(
     A single content-based 'suggested_category' row may be appended (see
     classification_rows), and — when ``page_html`` is supplied — spec-table rows
     (see spec_table_rows). No existing JSON-LD-derived row is changed.
+
+    When ``job_id`` is given, the assembled rows (and any ``image_bytes_list``)
+    are ALSO written immediately to crash-safe staging (packages/export.staging.
+    stage_capture) before the in-memory pack below is built — this is the
+    "no data lost ever" mechanism: the capture is safe on disk the instant this
+    call reaches that point, independent of whether build_bkpack below (or the
+    rest of the run) ever completes. Omitting ``job_id`` preserves the exact
+    prior behaviour (no staging at all) — fully backward compatible.
     """
     rows = to_evidence_rows(fields, page_url, structured=structured)
     if not rows:
@@ -294,6 +306,10 @@ def build_pack_from_fields(
     # already provide a Brand field of its own (no overwrite, no duplicate).
     if not any(r.field.strip().lower() == "brand" for r in rows):
         rows = rows + brand_vocab_rows(fields, page_url, schemas=schemas)
+    if job_id is not None:
+        stage_capture(
+            job_id, record_id, rows, image_bytes_list or [], staging_root=staging_root
+        )
     build_bkpack(
         output_path=output_path,
         evidence_rows=rows,

@@ -39,6 +39,7 @@ testpaths = [
     "packages/common/tests",
     "packages/schemas/tests",
     "packages/domain_knowledge/tests",
+    "packages/export/tests",
 ]
 
 [tool.ruff]
