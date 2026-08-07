@@ -54,3 +54,27 @@ def test_build_pack_unchanged_without_html(tmp_path):
     rows = build_pack_from_fields(fields, "https://ex.com/p", str(out), schemas=[])
     # no page_html and schemas=[] -> only the JSON-LD-derived rows, unchanged
     assert {r.field for r in rows} == {"name", "sku"}
+
+
+def test_build_pack_stages_spec_rows_with_no_json_ld_at_all(tmp_path):
+    # The actual fix: a page with real spec-table data but NO JSON-LD (e.g.
+    # fields == {}, exactly TBK Metal's real shape) must stage that spec-table
+    # data — not silently return nothing just because to_evidence_rows(fields)
+    # is empty.
+    out = tmp_path / "spec_only.bkpack.zip"
+    rows = build_pack_from_fields(
+        {}, "https://ex.com/p", str(out), schemas=[], page_html=MIXED_UNITS_HTML
+    )
+    assert validate_bkpack(str(out)).ok
+    assert {r.field for r in rows} == {"Thickness", "Depth", "Material", "Code"}
+
+
+def test_build_pack_stages_nothing_when_neither_source_has_data(tmp_path):
+    # The one case the gate must still catch: no JSON-LD AND no real spec
+    # table (an empty page, or one with only unrelated markup) -> no pack.
+    out = tmp_path / "neither.bkpack.zip"
+    rows = build_pack_from_fields(
+        {}, "https://ex.com/p", str(out), schemas=[], page_html="<div>no table here</div>"
+    )
+    assert rows == []
+    assert not out.exists()

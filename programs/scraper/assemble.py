@@ -283,9 +283,14 @@ def build_pack_from_fields(
 
     Returns the evidence rows written. If the page yielded no usable fields, no
     pack is built and an empty list is returned (never an empty/fabricated pack).
-    A single content-based 'suggested_category' row may be appended (see
-    classification_rows), and — when ``page_html`` is supplied — spec-table rows
-    (see spec_table_rows). No existing JSON-LD-derived row is changed.
+    "No usable fields" means neither JSON-LD-derived rows NOR spec-table rows —
+    the two sources are gathered independently and only their COMBINATION
+    decides whether there is anything to build a pack from. A page with a real
+    spec table but no JSON-LD (e.g. no Product-typed structured data at all)
+    now stages exactly that spec-table data, the same way a page with JSON-LD
+    but no spec table already staged that. A single content-based
+    'suggested_category' row may also be appended (see classification_rows).
+    No existing JSON-LD-derived row is changed.
 
     When ``job_id`` is given, the assembled rows (and any ``image_bytes_list``)
     are ALSO written immediately to crash-safe staging (packages/export.staging.
@@ -295,13 +300,19 @@ def build_pack_from_fields(
     rest of the run) ever completes. Omitting ``job_id`` preserves the exact
     prior behaviour (no staging at all) — fully backward compatible.
     """
-    rows = to_evidence_rows(fields, page_url, structured=structured)
+    record_id = _record_id(fields, page_url)
+    json_ld_rows = to_evidence_rows(fields, page_url, structured=structured)
+    spec_rows = spec_table_rows(page_html, page_url, record_id=record_id) if page_html else []
+    rows = json_ld_rows + spec_rows
     if not rows:
         return []
-    record_id = _record_id(fields, page_url)
+    # classify_category (inside classification_rows) still keys off
+    # fields.get("name")/description, which typically only comes from JSON-LD —
+    # a spec-table-only page (no JSON-LD, no page-title/meta fallback, which
+    # doesn't exist yet — a separate, unaddressed gap) still gets NO
+    # suggested_category row here. This task fixes evidence capture, not
+    # classification coverage; that gap is not touched or incidentally solved.
     rows = rows + classification_rows(fields, page_url, schemas=schemas)
-    if page_html:
-        rows = rows + spec_table_rows(page_html, page_url, record_id=record_id)
     # Infer Brand from the category's vocabulary, but only if the page did not
     # already provide a Brand field of its own (no overwrite, no duplicate).
     if not any(r.field.strip().lower() == "brand" for r in rows):
