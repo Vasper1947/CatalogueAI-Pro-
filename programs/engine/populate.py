@@ -74,6 +74,17 @@ def populate_from_evidence(bkpack_evidence, schema) -> PopulationResult:
         name = f["name"]
         required = bool(f.get("required"))
         canon = canonical(name)
+        # Deliberately EXACT canonical-name matching only — no schemas.aliases
+        # resolve_field() here, unlike engine/detect.py's _score(). Detection
+        # uses an alias as a category-CONFIDENCE signal (a reasoned judgment
+        # call, safe even for an imprecise/multi-option value — e.g. TBK
+        # Metal's "Height: 8/10/12mm" credits Edge Trim's Size field for
+        # scoring). Actually WRITING a customer-facing value needs a stricter
+        # bar: an aliased or multi-option value is not a confirmed single
+        # value, so it correctly falls through to needs_input for a human to
+        # confirm, rather than being silently auto-populated. Do not "fix"
+        # this to call resolve_field() — that would turn detect.py's
+        # scoring-only judgment call into a fabricated populated value.
         if canon in values:
             results.append(
                 FieldResult(name=name, required=required, status="populated", value=values[canon])

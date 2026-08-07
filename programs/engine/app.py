@@ -72,9 +72,22 @@ def _candidate_dicts(candidates) -> list:
         {
             "category_path": c.category_path,
             "score": round(c.score, 3),
+            "recall": round(c.recall, 3),
             "matched_fields": c.matched_fields,
         }
         for c in candidates[:TOP_CANDIDATES]
+    ]
+
+
+def _tied_candidate_dicts(candidates) -> list:
+    return [
+        {
+            "category_path": c.category_path,
+            "score": round(c.score, 3),
+            "recall": round(c.recall, 3),
+        }
+        for c in candidates
+        if c.ambiguous_tie
     ]
 
 
@@ -96,7 +109,15 @@ def _run_job(job_id: str, bkpack_path: str) -> None:
             "matched": None if best is None else best.get("category_path"),
             "top_candidates": _candidate_dicts(candidates),
         }
-        if best is None:
+        tied = _tied_candidate_dicts(candidates)
+        if tied:
+            # A genuine, unresolved tie (see match_template / resolve_tie_by_content)
+            # — never silently decided by file-load order. Report it explicitly and
+            # do NOT populate against an arbitrarily-picked candidate.
+            job["status"] = "category_ambiguous"
+            job["detection"]["tied_candidates"] = tied
+            job["population"] = None
+        elif best is None:
             job["status"] = "no_template_match"
             job["population"] = None
         else:
