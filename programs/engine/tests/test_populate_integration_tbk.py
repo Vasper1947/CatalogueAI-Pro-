@@ -98,27 +98,29 @@ def test_full_pipeline_populated_count_reported_honestly():
     result = populate_from_evidence(evidence, best)
     by = {f.name: f for f in result.fields}
 
-    # Honest, verified result: Material/Color/Length (all direct matches --
-    # Length's raw multi-option text populates unchanged, since the new alias
-    # gate does not apply to direct matches). Size -- only reachable via the
-    # Height alias -- is correctly rejected by the new numeric-confirmation
-    # gate, because "8/10/12mm / Customized." does not resolve to one specific
-    # measurement (see populate.py's _is_confirmed_numeric).
+    # Honest, verified result: Material/Color populate (direct matches to
+    # non-numeric fields, unaffected by the gate). Length and Size BOTH now
+    # correctly stay needs_input, for the SAME real reason -- neither
+    # "2.4/2.5/2.7/3 Meters" (Length, a direct match) nor "8/10/12mm /
+    # Customized." (Size, via the Height alias) resolves to one specific
+    # measurement (see populate.py's _is_confirmed_numeric). The gate no
+    # longer cares how the field name was matched, only whether the value is
+    # actually one confirmed number.
     assert by["Material"].status == "populated" and by["Material"].value == "Aluminum Alloy"
     assert by["Color"].status == "populated"
-    assert by["Length"].status == "populated"
-    assert by["Length"].value == "2.4/2.5/2.7/3 Meters"  # direct match, unaffected by the gate
-    assert by["Size"].status == "needs_input"  # aliased but not confirmed -- correctly rejected
+    assert by["Length"].status == "needs_input"  # direct match, but not one confirmed number
+    assert by["Length"].value is None
+    assert by["Size"].status == "needs_input"  # aliased, and also not one confirmed number
     assert by["Size"].value is None
 
-    assert result.populated_count == 3
-    # Still genuinely incomplete for real reasons: Brand was never stated on
-    # the page (no name/description JSON-LD, no Brand vocabulary hit), and
-    # Size/Size Unit/Length Unit/Selling Unit/Quantity per Selling Unit have
-    # no usable evidence either.
+    assert result.populated_count == 2
+    # Genuinely incomplete for real reasons: Brand was never stated on the
+    # page (no name/description JSON-LD, no Brand vocabulary hit), and
+    # Length/Size/Size Unit/Length Unit/Selling Unit/Quantity per Selling Unit
+    # have no usable evidence either.
     assert result.status == "incomplete"
     assert set(result.missing_required) == {
-        "Brand", "Size", "Size Unit", "Length Unit",
+        "Brand", "Length", "Size", "Size Unit", "Length Unit",
         "Selling Unit", "Quantity per Selling Unit",
     }
 
@@ -136,5 +138,5 @@ def test_real_ingest_pipeline_reports_the_same_honest_result(tmp_path):
 
     assert res["status"] == "template_matched"
     assert res["detection"]["matched"][-1] == "Edge Trim"
-    assert res["population"]["populated_count"] == 3
+    assert res["population"]["populated_count"] == 2
     assert res["population"]["status"] == "incomplete"

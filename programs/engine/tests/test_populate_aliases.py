@@ -2,15 +2,17 @@
 category-aware, value-guarded mechanism engine/detect.py's _score() already
 uses — so a field arriving under an alias name gets a fair chance to populate.
 
-This does NOT lower the bar for what counts as a confirmed value. An alias
-that resolves to a NUMERIC schema field gets one extra check beyond the
+This does NOT lower the bar for what counts as a confirmed value. ANY match to
+a NUMERIC schema field — direct or aliased — gets one extra check beyond the
 existing aliases.py guard: the value must resolve to one specific measurement
 via common/units.py's normalize_value (a scalar with a real unit), not a
-multi-option/categorical passthrough like "8/10/12mm" (which the aliases.py
-single_axis_length guard already accepts — see aliases.py's own docstring —
-so without this extra check it would wrongly populate). A non-numeric alias
-target (Brand, Grade, Color, ...) is unaffected by this extra check; its value
-populates exactly like a direct match would, once resolved.
+multi-option/categorical passthrough like "8/10/12mm" or "2.4/2.5/2.7/3
+Meters" (the aliases.py single_axis_length guard already accepts a same-axis
+option list like "8/10/12mm" — see aliases.py's own docstring — so without
+this extra check an aliased match would wrongly populate; and a DIRECT match
+can state a multi-option spec just as easily, so it gets the same scrutiny).
+A non-numeric target (Brand, Grade, Color, ...) is unaffected by this extra
+check, whether reached directly or via alias.
 """
 
 from engine.populate import populate_from_evidence
@@ -87,12 +89,25 @@ def test_aliased_multi_axis_value_still_rejected_by_the_pre_existing_guard():
     assert by["Diameter"].value is None
 
 
-def test_direct_match_multi_option_value_is_unaffected_by_the_new_gate():
-    # A DIRECT name match (no aliasing involved) is untouched by this task --
-    # the bar for a direct match doesn't change, even for a multi-option value.
+def test_direct_match_clean_single_value_still_populates():
+    # A DIRECT name match with a genuinely single, clean value is unaffected --
+    # the common case, no regression from adding the gate to direct matches.
+    schema = _schema(["Floor & Wall Finishes", "Edge Trim"], [("Length", True, "numeric")])
+    result = populate_from_evidence(_ev({"Length": "2.5 m"}), schema)
+
+    by = _by_name(result)
+    assert by["Length"].status == "populated"
+    assert by["Length"].value == "2.5 m"
+
+
+def test_direct_match_multi_option_value_now_also_rejected_by_the_gate():
+    # A DIRECT name match (no aliasing involved) to a NUMERIC field is no
+    # longer exempt: whether a value is one confirmed number doesn't depend on
+    # how its field name was matched, so a direct-match multi-option spec is
+    # rejected exactly like an aliased one would be.
     schema = _schema(["Floor & Wall Finishes", "Edge Trim"], [("Length", True, "numeric")])
     result = populate_from_evidence(_ev({"Length": "2.4/2.5/2.7/3 Meters"}), schema)
 
     by = _by_name(result)
-    assert by["Length"].status == "populated"
-    assert by["Length"].value == "2.4/2.5/2.7/3 Meters"
+    assert by["Length"].status == "needs_input"
+    assert by["Length"].value is None

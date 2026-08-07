@@ -7,17 +7,18 @@ ready_for_review only when every *required* writable field has a value.
 An evidence field that isn't a DIRECT name match may still populate via
 schemas.aliases.resolve_field — the same category-aware, value-guarded
 mechanism engine/detect.py's _score() uses for scoring (e.g. "Height" -> an
-Edge Trim's "Size"). A direct match's bar is unchanged: whatever raw value
-evidence provides populates, exactly as before. An ALIAS-resolved match to a
-NUMERIC field gets one extra check (_is_confirmed_numeric, via
-common/units.py's normalize_value): the value must resolve to one specific
-measurement, not a multi-option/categorical passthrough like "8/10/12mm" —
-which the aliases.py guard itself already accepts (see aliases.py's
-docstring), so without this extra check it would wrongly populate. The alias
-resolved correctly in that case; the value itself just isn't one specific,
-writable answer. A non-numeric alias target (Brand, Grade, Color, ...) is not
-subject to this extra check — resolve_field's own guard is the only bar for
-it, same as detect.py.
+Edge Trim's "Size").
+
+Any match to a NUMERIC schema field — direct or aliased — gets one extra
+check (_is_confirmed_numeric, via common/units.py's normalize_value): the
+value must resolve to one specific measurement, not a multi-option/
+categorical passthrough like "8/10/12mm" or "2.4/2.5/2.7/3 Meters". Whether a
+value is actually one confirmed number doesn't depend on how its field name
+was matched — a direct-match evidence field can state a multi-option spec
+just as easily as an aliased one, and both are equally unconfirmed. A
+non-numeric field (Brand, Grade, Color, ...) is not subject to this extra
+check at all — resolve_field's own guard (for an aliased field) or a bare
+non-blank value (for a direct match) is the only bar for it, same as before.
 """
 
 from __future__ import annotations
@@ -70,19 +71,20 @@ def _is_confirmed_numeric(value: str) -> bool:
     ("8/10/12mm", which aliases.py's own single_axis_length guard accepts, so
     this is the check that keeps it from being treated as a confirmed value).
 
-    Scope: only meaningful for a NUMERIC target field reached via alias
-    resolution (see populate_from_evidence) — a length-shaped value is what
-    this is evaluating. It is not applied to non-numeric fields (Brand, Grade,
-    Color, ...), since normalize_value only understands length units; a
-    genuinely single non-numeric value (e.g. a brand name) is not put through
-    this check at all.
+    Scope: applied to every NUMERIC target field (see populate_from_evidence),
+    regardless of whether it was reached by a direct name match or via alias —
+    a length-shaped value is what this is evaluating, and that evaluation
+    doesn't care how the field was found. It is not applied to non-numeric
+    fields (Brand, Grade, Color, ...), since normalize_value only understands
+    length units; a genuinely single non-numeric value (e.g. a brand name) is
+    not put through this check at all.
     """
     normalized, unit, _confidence = normalize_value(value)
     return unit is not None and not isinstance(normalized, list)
 
 
 def _evidence_value_map(bkpack_evidence, writable_canon, available_fields) -> dict:
-    """canonical schema field name -> (first non-blank value seen, was_aliased).
+    """canonical schema field name -> first non-blank value seen for it.
 
     A blank value is NOT evidence of a real value — it must not populate a field
     (that would be the silent blank this project forbids), so such rows are
@@ -92,12 +94,9 @@ def _evidence_value_map(bkpack_evidence, writable_canon, available_fields) -> di
     against the schema's own writable fields (writable_canon); only when there
     is no direct match is it resolved via schemas.aliases.resolve_field — the
     same category-aware, value-guarded mechanism engine/detect.py's _score()
-    uses. ``was_aliased`` records which path found it, so
-    populate_from_evidence can apply the extra numeric-confirmation check only
-    to the alias path (see _is_confirmed_numeric) — a direct match's bar is
-    unchanged.
+    uses.
     """
-    values: dict[str, tuple[str, bool]] = {}
+    values: dict[str, str] = {}
     for row in bkpack_evidence:
         if row.get("absence"):
             continue
@@ -107,12 +106,9 @@ def _evidence_value_map(bkpack_evidence, writable_canon, available_fields) -> di
             continue
         base_canon = canonical(name)
         target = base_canon
-        aliased = False
         if base_canon not in writable_canon:
-            resolved_name = resolve_field(base_canon, value, available_fields=available_fields)
-            target = canonical(resolved_name)
-            aliased = target != base_canon
-        values.setdefault(target, (str(value), aliased))
+            target = canonical(resolve_field(base_canon, value, available_fields=available_fields))
+        values.setdefault(target, str(value))
     return values
 
 
@@ -129,13 +125,10 @@ def populate_from_evidence(bkpack_evidence, schema) -> PopulationResult:
         name = f["name"]
         required = bool(f.get("required"))
         canon = canonical(name)
-        entry = values.get(canon)
-        if entry is not None:
-            value, was_aliased = entry
-            if was_aliased and f.get("type") == "numeric" and not _is_confirmed_numeric(value):
-                entry = None  # aliased correctly, but not one confirmed value
-        if entry is not None:
-            value, _was_aliased = entry
+        value = values.get(canon)
+        if value is not None and f.get("type") == "numeric" and not _is_confirmed_numeric(value):
+            value = None  # matched (direct or aliased), but not one confirmed value
+        if value is not None:
             results.append(
                 FieldResult(name=name, required=required, status="populated", value=value)
             )
