@@ -3,11 +3,29 @@
 A field with matching evidence is populated; a field without is marked
 needs_input (never a silent blank, never fabricated). The overall status is
 ready_for_review only when every *required* writable field has a value.
+
+An evidence field that isn't a DIRECT name match may still populate via
+schemas.aliases.resolve_field — the same category-aware, value-guarded
+mechanism engine/detect.py's _score() uses for scoring (e.g. "Height" -> an
+Edge Trim's "Size"). A direct match's bar is unchanged: whatever raw value
+evidence provides populates, exactly as before. An ALIAS-resolved match to a
+NUMERIC field gets one extra check (_is_confirmed_numeric, via
+common/units.py's normalize_value): the value must resolve to one specific
+measurement, not a multi-option/categorical passthrough like "8/10/12mm" —
+which the aliases.py guard itself already accepts (see aliases.py's
+docstring), so without this extra check it would wrongly populate. The alias
+resolved correctly in that case; the value itself just isn't one specific,
+writable answer. A non-numeric alias target (Brand, Grade, Color, ...) is not
+subject to this extra check — resolve_field's own guard is the only bar for
+it, same as detect.py.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+
+from common.units import normalize_value
+from schemas.aliases import resolve_field
 
 from engine.detect import canonical, writable_fields
 
@@ -45,14 +63,41 @@ def _is_blank(value) -> bool:
     return False
 
 
-def _evidence_value_map(bkpack_evidence) -> dict:
-    """canonical field name -> first non-blank value seen for it.
+def _is_confirmed_numeric(value: str) -> bool:
+    """True if common/units.py's normalize_value resolves this to ONE specific
+    measurement — a scalar with a real unit — rather than a multi-axis list
+    ("300 x 600 mm") or an unresolved categorical/multi-option passthrough
+    ("8/10/12mm", which aliases.py's own single_axis_length guard accepts, so
+    this is the check that keeps it from being treated as a confirmed value).
+
+    Scope: only meaningful for a NUMERIC target field reached via alias
+    resolution (see populate_from_evidence) — a length-shaped value is what
+    this is evaluating. It is not applied to non-numeric fields (Brand, Grade,
+    Color, ...), since normalize_value only understands length units; a
+    genuinely single non-numeric value (e.g. a brand name) is not put through
+    this check at all.
+    """
+    normalized, unit, _confidence = normalize_value(value)
+    return unit is not None and not isinstance(normalized, list)
+
+
+def _evidence_value_map(bkpack_evidence, writable_canon, available_fields) -> dict:
+    """canonical schema field name -> (first non-blank value seen, was_aliased).
 
     A blank value is NOT evidence of a real value — it must not populate a field
     (that would be the silent blank this project forbids), so such rows are
     skipped and the field falls through to needs_input.
+
+    Each evidence field name is first checked for a DIRECT canonical match
+    against the schema's own writable fields (writable_canon); only when there
+    is no direct match is it resolved via schemas.aliases.resolve_field — the
+    same category-aware, value-guarded mechanism engine/detect.py's _score()
+    uses. ``was_aliased`` records which path found it, so
+    populate_from_evidence can apply the extra numeric-confirmation check only
+    to the alias path (see _is_confirmed_numeric) — a direct match's bar is
+    unchanged.
     """
-    values: dict[str, str] = {}
+    values: dict[str, tuple[str, bool]] = {}
     for row in bkpack_evidence:
         if row.get("absence"):
             continue
@@ -60,34 +105,39 @@ def _evidence_value_map(bkpack_evidence) -> dict:
         value = row.get("value")
         if not name or _is_blank(value):
             continue
-        values.setdefault(canonical(name), str(value))
+        base_canon = canonical(name)
+        target = base_canon
+        aliased = False
+        if base_canon not in writable_canon:
+            resolved_name = resolve_field(base_canon, value, available_fields=available_fields)
+            target = canonical(resolved_name)
+            aliased = target != base_canon
+        values.setdefault(target, (str(value), aliased))
     return values
 
 
 def populate_from_evidence(bkpack_evidence, schema) -> PopulationResult:
-    values = _evidence_value_map(bkpack_evidence)
+    fields = writable_fields(schema)
+    writable_canon = {canonical(f["name"]): f["name"] for f in fields}
+    available = set(writable_canon.values())
+    values = _evidence_value_map(bkpack_evidence, writable_canon, available)
     results: list[FieldResult] = []
     missing_required: list[str] = []
     populated = 0
 
-    for f in writable_fields(schema):
+    for f in fields:
         name = f["name"]
         required = bool(f.get("required"))
         canon = canonical(name)
-        # Deliberately EXACT canonical-name matching only — no schemas.aliases
-        # resolve_field() here, unlike engine/detect.py's _score(). Detection
-        # uses an alias as a category-CONFIDENCE signal (a reasoned judgment
-        # call, safe even for an imprecise/multi-option value — e.g. TBK
-        # Metal's "Height: 8/10/12mm" credits Edge Trim's Size field for
-        # scoring). Actually WRITING a customer-facing value needs a stricter
-        # bar: an aliased or multi-option value is not a confirmed single
-        # value, so it correctly falls through to needs_input for a human to
-        # confirm, rather than being silently auto-populated. Do not "fix"
-        # this to call resolve_field() — that would turn detect.py's
-        # scoring-only judgment call into a fabricated populated value.
-        if canon in values:
+        entry = values.get(canon)
+        if entry is not None:
+            value, was_aliased = entry
+            if was_aliased and f.get("type") == "numeric" and not _is_confirmed_numeric(value):
+                entry = None  # aliased correctly, but not one confirmed value
+        if entry is not None:
+            value, _was_aliased = entry
             results.append(
-                FieldResult(name=name, required=required, status="populated", value=values[canon])
+                FieldResult(name=name, required=required, status="populated", value=value)
             )
             populated += 1
         else:
