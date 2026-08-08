@@ -17,12 +17,13 @@ from __future__ import annotations
 
 import http.client
 import json
+import re
 import urllib.error
 import urllib.request
 import urllib.robotparser
 import xml.etree.ElementTree as ET
 from collections.abc import Callable, Iterator
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 from bs4 import BeautifulSoup
 
@@ -279,6 +280,70 @@ def extract_structured_data(page_url: str, *, html: str | None = None) -> dict:
         if fields:
             return fields
     return {}
+
+
+_GIF_RE = re.compile(r"\.gif(?:[?#].*)?$", re.IGNORECASE)
+
+
+def find_media(page_html: str, base_url: str) -> list[dict]:
+    """Return [{"url", "media_type"}] for <video>/<source> elements and .gif
+    references on the page. Relative URLs are resolved against base_url.
+    Deduplicated by resolved URL. Empty list if the page has neither —
+    never guessed, never invented.
+    """
+    soup = BeautifulSoup(page_html or "", "html.parser")
+    results: list[dict] = []
+    seen: set[str] = set()
+
+    def _add(raw_url, media_type: str) -> None:
+        if not raw_url or not str(raw_url).strip():
+            return
+        resolved = urljoin(base_url, str(raw_url).strip())
+        if resolved not in seen:
+            seen.add(resolved)
+            results.append({"url": resolved, "media_type": media_type})
+
+    for video in soup.find_all("video"):
+        _add(video.get("src"), "video")
+        for source in video.find_all("source"):
+            _add(source.get("src"), "video")
+
+    for tag in soup.find_all(["img", "a", "source"]):
+        src = tag.get("src") or tag.get("href") or tag.get("data-src")
+        if src and _GIF_RE.search(str(src)):
+            _add(src, "gif")
+
+    return results
+
+
+def capture_full_page_snapshot(page) -> bytes:
+    """Full-page PNG screenshot of an already-loaded Playwright page, via
+    Playwright's own page.screenshot(full_page=True) -- no custom capture
+    logic, just the existing capability."""
+    return page.screenshot(full_page=True)
+
+
+def render_and_snapshot(page_url: str) -> tuple[str | None, bytes | None]:
+    """Render page_url with headless Chromium and return (html, snapshot_png)
+    from the SAME browser session -- so the snapshot reflects exactly the page
+    extract_structured_data/find_media would see. Either element is None on
+    failure (imported lazily, same reasoning as _render_html)."""
+    try:
+        from playwright.sync_api import Error as PlaywrightError
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return None, None
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page(user_agent=USER_AGENT)
+            page.goto(page_url, wait_until="domcontentloaded", timeout=30000)
+            html = page.content()
+            snapshot = capture_full_page_snapshot(page)
+            browser.close()
+            return html, snapshot
+    except (PlaywrightError, OSError):
+        return None, None
 
 
 def extract_spec_table(page_html: str) -> list[tuple[str, str]]:

@@ -46,6 +46,7 @@ build/
 dist/
 .pytest_cache/
 .ruff_cache/
+.coverage
 sample.bkpack.zip
 *.bkpack.zip
 

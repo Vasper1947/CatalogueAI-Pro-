@@ -118,3 +118,17 @@ def normalize_value(raw_value) -> tuple[object, str | None, float]:
 
     # Non-numeric categorical value: nothing to normalize, and not ambiguous.
     return raw, None, HIGH
+
+
+def convert_from_mm(value_mm: float, target_unit: str) -> float | None:
+    """Convert a canonical-mm value into target_unit. Returns None for an
+    unrecognized unit — never guesses a conversion factor. Used by
+    engine/writer.py so a numeric field is written in ITS OWN schema unit
+    (e.g. metres for Length), not blindly in normalize_value's canonical mm —
+    writing 2500 into a field whose real unit is "m" would be a fabricated-
+    looking value, not a faithful one.
+    """
+    factor = _unit_to_mm(target_unit)
+    if factor is None:
+        return None
+    return _fmt(value_mm / factor)

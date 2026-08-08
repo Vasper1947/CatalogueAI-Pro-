@@ -14,10 +14,17 @@ default — see the module docstring in __init__.py):
     <staging_root>/<job_id>/<record_id>/evidence.jsonl
     <staging_root>/<job_id>/<record_id>/image_<n>.raw
     <staging_root>/<job_id>/<record_id>/<record_id>_<n>.webp   (after processing)
+    <staging_root>/<job_id>/<record_id>/media_refs.json        (discovered video/gif URLs, if any)
+
+A full-page snapshot is not a distinct staging concept — it is just another
+image (PNG bytes), staged and processed through the exact same image_bytes_list
+/ process_image path as a product photo, per Task 4's "same crash-safe
+discipline as images."
 """
 
 from __future__ import annotations
 
+import json
 import zipfile
 from pathlib import Path
 
@@ -38,13 +45,17 @@ def stage_capture(
     image_bytes_list: list[bytes],
     *,
     staging_root,
+    media_refs: list[dict] | None = None,
 ) -> Path:
     """Write one record's evidence and raw image bytes to disk immediately.
 
     evidence_rows are already-validated EvidenceRow objects (EvidenceRow
     raises at construction on any "no evidence, no value" violation — never
     re-checked here, because it can't be false by the time this runs).
-    Returns the record's staging directory.
+    ``media_refs`` (optional) is discovered video/gif URL metadata (see
+    discover.find_media) — references, not bytes, so it is written as a small
+    JSON file rather than staged like an image. Returns the record's staging
+    directory.
     """
     record_dir = _record_dir(job_id, record_id, staging_root)
     record_dir.mkdir(parents=True, exist_ok=True)
@@ -53,6 +64,10 @@ def stage_capture(
     )
     for index, raw_bytes in enumerate(image_bytes_list):
         (record_dir / f"image_{index}.raw").write_bytes(raw_bytes)
+    if media_refs:
+        (record_dir / "media_refs.json").write_text(
+            json.dumps(media_refs, indent=2), encoding="utf-8"
+        )
     return record_dir
 
 
@@ -94,12 +109,17 @@ def finalize_zip(job_id: str, output_path, *, staging_root, producer: dict) -> P
     function either way, because it never depends on anything beyond job_id
     and what stage_capture() already wrote to staging_root.
 
-    1. Process any not-yet-converted staged images (idempotent).
+    1. Process any not-yet-converted staged images (idempotent) -- this
+       includes a full-page snapshot, since it is staged as just another image.
     2. Call the existing, UNMODIFIED bkpack.writer.build_bkpack() for the core
        pack (datapackage.json/evidence.jsonl/manifest/media) -- packages/bkpack
        is only ever called here, never reimplemented.
     3. Generate SKU.csv (export.csv_export.write_sku_csv) from the same staged
        evidence, and append it to the just-built ZIP.
+    4. If any record staged discovered video/gif references (media_refs.json),
+       aggregate them (keyed by record_id, same aggregation pattern as
+       SKU.csv) into one media_refs.json at the ZIP root. Omitted entirely
+       when no record staged any -- never an empty/fabricated file.
     """
     from export.csv_export import write_sku_csv  # deferred: csv_export imports
     # list_staged_records from this module; a module-level import here would
@@ -109,6 +129,7 @@ def finalize_zip(job_id: str, output_path, *, staging_root, producer: dict) -> P
 
     all_rows: list[EvidenceRow] = []
     media_files: dict[str, bytes] = {}
+    all_media_refs: dict[str, list[dict]] = {}
     for record_id in record_ids:
         _process_staged_images(job_id, record_id, staging_root)
         all_rows.extend(
@@ -117,6 +138,9 @@ def finalize_zip(job_id: str, output_path, *, staging_root, producer: dict) -> P
         record_dir = _record_dir(job_id, record_id, staging_root)
         for webp_path in sorted(record_dir.glob("*.webp")):
             media_files[webp_path.name] = webp_path.read_bytes()
+        refs_path = record_dir / "media_refs.json"
+        if refs_path.exists():
+            all_media_refs[record_id] = json.loads(refs_path.read_text(encoding="utf-8"))
 
     build_bkpack(
         output_path=str(output_path),
@@ -128,5 +152,7 @@ def finalize_zip(job_id: str, output_path, *, staging_root, producer: dict) -> P
     csv_text = write_sku_csv(job_id, staging_root=staging_root)
     with zipfile.ZipFile(output_path, "a", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("SKU.csv", csv_text)
+        if all_media_refs:
+            zf.writestr("media_refs.json", json.dumps(all_media_refs, indent=2))
 
     return Path(output_path)

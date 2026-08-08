@@ -26,7 +26,7 @@ from schemas.classify import (
     top_suggestion,
 )
 
-from scraper.discover import extract_spec_table
+from scraper.discover import extract_spec_table, find_media
 
 # Confidence reflects provenance / extraction path. A spec table's explicit
 # key/value rows are the highest-trust scrape signal, above schema.org JSON-LD;
@@ -292,13 +292,17 @@ def build_pack_from_fields(
     'suggested_category' row may also be appended (see classification_rows).
     No existing JSON-LD-derived row is changed.
 
-    When ``job_id`` is given, the assembled rows (and any ``image_bytes_list``)
-    are ALSO written immediately to crash-safe staging (packages/export.staging.
-    stage_capture) before the in-memory pack below is built — this is the
-    "no data lost ever" mechanism: the capture is safe on disk the instant this
-    call reaches that point, independent of whether build_bkpack below (or the
-    rest of the run) ever completes. Omitting ``job_id`` preserves the exact
-    prior behaviour (no staging at all) — fully backward compatible.
+    When ``job_id`` is given, the assembled rows (and any ``image_bytes_list``
+    — a full-page snapshot, if the caller captured one, is just another entry
+    here, staged with the same discipline as a product photo) are ALSO written
+    immediately to crash-safe staging (packages/export.staging.stage_capture)
+    before the in-memory pack below is built — this is the "no data lost ever"
+    mechanism: the capture is safe on disk the instant this call reaches that
+    point, independent of whether build_bkpack below (or the rest of the run)
+    ever completes. Any video/gif references discoverable in ``page_html``
+    (scraper.discover.find_media) are staged alongside as metadata. Omitting
+    ``job_id`` preserves the exact prior behaviour (no staging at all) — fully
+    backward compatible.
     """
     record_id = _record_id(fields, page_url)
     json_ld_rows = to_evidence_rows(fields, page_url, structured=structured)
@@ -318,8 +322,10 @@ def build_pack_from_fields(
     if not any(r.field.strip().lower() == "brand" for r in rows):
         rows = rows + brand_vocab_rows(fields, page_url, schemas=schemas)
     if job_id is not None:
+        media_refs = find_media(page_html, page_url) if page_html else []
         stage_capture(
-            job_id, record_id, rows, image_bytes_list or [], staging_root=staging_root
+            job_id, record_id, rows, image_bytes_list or [],
+            staging_root=staging_root, media_refs=media_refs or None,
         )
     build_bkpack(
         output_path=output_path,

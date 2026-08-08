@@ -1,6 +1,6 @@
 """Unit-normalization tests: conversions, decimals, dimensions, ambiguity."""
 
-from common.units import normalize_value
+from common.units import convert_from_mm, normalize_value
 
 
 def test_mm_value_normalizes_confidently():
@@ -51,3 +51,15 @@ def test_categorical_string_passes_through():
     assert value == "Aluminium"
     assert unit is None
     assert confidence >= 0.5
+
+
+def test_convert_from_mm_to_metres():
+    assert convert_from_mm(2500.0, "m") == 2.5
+
+
+def test_convert_from_mm_to_itself_is_unchanged():
+    assert convert_from_mm(12.0, "mm") == 12.0
+
+
+def test_convert_from_mm_unrecognized_unit_returns_none():
+    assert convert_from_mm(2500.0, "furlong") is None

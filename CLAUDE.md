@@ -103,3 +103,25 @@ genuinely irreversible, in which case stop first.
 
 When in doubt, prefer doing the reversible work and reporting it over stopping;
 but never trade away one of the "always stop" items for momentum.
+
+## Standing rules (stop restating these in every prompt)
+
+- **Locked, never modified without explicit per-file authorization**:
+  `packages/bkpack/**`, `packages/schemas/{parser,store,models}.py`,
+  `tests/test_bkpack.py`. A task can lift the lock for one specific file for
+  its own duration — that doesn't lift it for anything else, ever.
+- **Never force a match, lower a threshold, or tune a rule so a specific case
+  passes.** A threshold moves only with a stated structural reason grounded
+  in real data — never to make one input produce a desired outcome.
+- **Never fabricate a value, a source, or a test result.** A failing or
+  ambiguous real result is a valid, reportable outcome — not a problem to
+  make disappear.
+- **Every new capability gets tested against real data, not only fixtures**,
+  and the real result is reported honestly, whatever it is — including when
+  it doesn't do what was hoped.
+- **Constructed/synthetic test evidence is always labeled as such**, both in
+  the test file itself and in any report about it — never presented as if it
+  were a real scraped/captured result.
+- **Every session ends with**: `ruff check .` clean, `pytest -v` green,
+  changes committed, pushed, the push verified via `git ls-remote`, and
+  `ROADMAP.md` updated to reflect what actually landed.
