@@ -241,9 +241,9 @@ def test_verify_reports_a_real_value_mismatch_when_the_file_diverges(tmp_path):
     wb["Template"].cell(row=3, column=2, value="Something Else")
     wb.save(out)
 
-    report = _verify(out, schema, schema["fields"], {"Material": "PVC"})
+    report = _verify(out, schema, schema["fields"], [{"Material": "PVC"}])
 
-    assert report.value_mismatches == ["Material: wrote 'PVC', re-read 'Something Else'"]
+    assert report.value_mismatches == ["row 3 Material: wrote 'PVC', re-read 'Something Else'"]
 
 
 def test_verify_reports_structure_failure_for_a_field_missing_from_the_file():
@@ -259,7 +259,7 @@ def test_verify_reports_structure_failure_for_a_field_missing_from_the_file():
     with tempfile.TemporaryDirectory() as td:
         out = Path(td) / "out.xlsx"
         write_template(_population({}), schema, out)
-        report = _verify(out, schema, fake_fields, {})
+        report = _verify(out, schema, fake_fields, [{}])
 
     assert report.structure_ok is False
 

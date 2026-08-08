@@ -15,8 +15,8 @@ Self-verification is mandatory, not optional: every written file is
 immediately re-parsed with packages/schemas' own, already-proven parser
 (parse_template) and diffed against what write_template intended — field
 names, types, required/locked flags, and column positions for the STRUCTURE;
-the actual written cell values for the DATA. Any real mismatch raises
-WriteVerificationError — a quietly-wrong file is never shipped.
+the actual written cell values for the DATA, row by row. Any real mismatch
+raises WriteVerificationError — a quietly-wrong file is never shipped.
 
 One honest, documented, MECHANICAL limitation (not a convenience exclusion):
 a formula column's original formula text (e.g. "System Product Name") is
@@ -28,6 +28,13 @@ cannot re-parse as data_type == "f" no matter what is written, since there is
 no formula text to write. is_formula is therefore excluded from the automated
 structural diff for that reason alone, and is separately, explicitly reported
 (never silently) — see VerificationReport.formula_fields_left_blank.
+
+write_template() writes exactly one record (one data row) — the original,
+still-supported entry point. write_template_batch() writes N records into the
+SAME file as N data rows, sharing one set of column headers/validations/
+protection, for the real case of many products in one BK category. Both
+share the same per-row value logic and the same mandatory self-verification,
+generalized to check every row, not just row 3.
 """
 
 from __future__ import annotations
@@ -46,11 +53,11 @@ from engine.detect import NEVER_POPULATE, canonical
 from engine.populate import PopulationResult
 
 # Row 1: section labels (written only where a NEW section starts -- see
-# write_template -- so its text-cell count stays below HEADER_ROW's for every
+# _write_columns -- so its text-cell count stays below HEADER_ROW's for every
 # real field). Row 2: field headers, every field, always. This ordering is
 # what schemas.parser._section_map requires (it reads header_row - 1) and
 # what _detect_header_row's own "most string cells wins, ties go to the
-# earlier row" rule requires (see write_template's inline reasoning).
+# earlier row" rule requires (see _write_columns's inline reasoning).
 HEADER_ROW = 2
 DATA_ROW = 3
 
@@ -69,13 +76,39 @@ class VerificationReport:
 
 
 @dataclass
+class RowWriteResult:
+    """Per-record outcome within a written file — one per data row."""
+
+    written_fields: list[str] = field(default_factory=list)
+    blank_needs_input: list[str] = field(default_factory=list)
+    blank_invalid_dropdown: list[str] = field(default_factory=list)
+    blank_unresolved_numeric: list[str] = field(default_factory=list)
+    blank_never_populate: list[str] = field(default_factory=list)
+    blank_variant_candidate: list[str] = field(default_factory=list)
+
+
+@dataclass
 class WriteResult:
+    """Single-record result — write_template()'s return value. Mirrors
+    RowWriteResult's fields directly (it always describes exactly one row)."""
+
     output_path: str
     written_fields: list[str] = field(default_factory=list)
     blank_needs_input: list[str] = field(default_factory=list)
     blank_invalid_dropdown: list[str] = field(default_factory=list)
     blank_unresolved_numeric: list[str] = field(default_factory=list)
     blank_never_populate: list[str] = field(default_factory=list)
+    blank_variant_candidate: list[str] = field(default_factory=list)
+    verification: VerificationReport | None = None
+
+
+@dataclass
+class BatchWriteResult:
+    """Multi-record result — write_template_batch()'s return value. One
+    RowWriteResult per input PopulationResult, in the same order."""
+
+    output_path: str
+    row_results: list[RowWriteResult] = field(default_factory=list)
     verification: VerificationReport | None = None
 
 
@@ -118,12 +151,16 @@ def _numeric_cell_value(schema: dict, field_name: str, raw_value: str) -> float 
     return convert_from_mm(float(normalized), target_unit)
 
 
-def _dropdown_formula(f: dict, lookup_col_letter: dict[str, str]) -> str:
+def _dropdown_formula(f: dict, lookup_col_letter: dict[str, str], num_rows: int) -> str:
     """A validation formula1 matching how THIS field's real vocabulary is
     sourced: a Lookup-sheet range reference when dropdown_source says so (the
     real convention for large vocabularies, e.g. a 45-brand list — Excel's
     inline list formula has a ~255-character limit an inline "a,b,c,..." for
-    that many brands would exceed), inline otherwise."""
+    that many brands would exceed), inline otherwise. num_rows is unused here
+    (the Lookup range is fixed by the vocabulary's own length regardless of
+    how many data rows this file has) — kept as a parameter for symmetry with
+    the caller's per-field setup and possible future per-row-count tuning."""
+    del num_rows
     source = f.get("dropdown_source") or ""
     vocab = f.get("vocabulary") or []
     if source.startswith("lookup:"):
@@ -133,40 +170,57 @@ def _dropdown_formula(f: dict, lookup_col_letter: dict[str, str]) -> str:
     return '"' + ",".join(vocab) + '"'
 
 
-def write_template(population_result: PopulationResult, schema: dict, output_path) -> WriteResult:
-    """Write one populated record into a fresh .xlsx built from schema's real
-    structure, then immediately re-parse and verify it. Raises
-    WriteVerificationError on any real mismatch."""
-    fields = schema.get("fields", [])
-    by_name = {fr.name: fr for fr in population_result.fields}
-    result = WriteResult(output_path=str(output_path))
-    intended_values: dict[str, object] = {}
-
-    wb = openpyxl.Workbook()
-    tmpl = wb.active
-    tmpl.title = "Template"
-    tmpl.protection.sheet = True  # required for a written cell's locked=False to mean anything
-
-    lookup_names = list((schema.get("lookups") or {}).keys())
-    lookup_col_letter = {name: get_column_letter(i) for i, name in enumerate(lookup_names, start=1)}
-
+def _write_columns(
+    tmpl, fields: list[dict], lookup_col_letter: dict[str, str]
+) -> tuple[dict[str, int], dict[str, DataValidation]]:
+    """One-time, row-count-independent setup: section labels, headers,
+    dropdown validation objects, numeric formats. Returns ({field_name:
+    column_index}, {field_name: DataValidation}) for the per-row writer to
+    use — kept as local dicts, never stashed on the schema's own field dicts,
+    since those may be a cached, shared object (e.g. engine/app.py's
+    module-level schema cache) that must never carry transient per-write
+    state between calls."""
+    col_by_name: dict[str, int] = {}
+    dv_by_name: dict[str, DataValidation] = {}
     prev_section = object()  # sentinel unequal to any real section value or None
     for f in fields:
         col = column_index_from_string(f["column"])
+        col_by_name[f["name"]] = col
         section = f.get("section")
         if section and section != prev_section:
             tmpl.cell(row=1, column=col, value=section)
         prev_section = section
 
         tmpl.cell(row=HEADER_ROW, column=col, value=_header_text(f))
-        data_cell = tmpl.cell(row=DATA_ROW, column=col)
 
         if f.get("type") == "dropdown" and f.get("vocabulary"):
-            dv = DataValidation(type="list", formula1=_dropdown_formula(f, lookup_col_letter))
+            dv = DataValidation(
+                type="list", formula1=_dropdown_formula(f, lookup_col_letter, 0)
+            )
             tmpl.add_data_validation(dv)
-            dv.add(data_cell)
+            dv_by_name[f["name"]] = dv
+    return col_by_name, dv_by_name
+
+
+def _write_row(
+    tmpl, fields: list[dict], col_by_name: dict[str, int], dv_by_name: dict[str, DataValidation],
+    row: int, schema: dict, population_result: PopulationResult,
+) -> tuple[RowWriteResult, dict[str, object]]:
+    """Write one record's values into row `row`. Returns (RowWriteResult,
+    {field_name: value actually written}) — the latter feeds verification."""
+    by_name = {fr.name: fr for fr in population_result.fields}
+    result = RowWriteResult()
+    intended_values: dict[str, object] = {}
+
+    for f in fields:
+        col = col_by_name[f["name"]]
+        data_cell = tmpl.cell(row=row, column=col)
+
         if f.get("type") == "numeric":
             data_cell.number_format = "0.####"
+        dv = dv_by_name.get(f["name"])
+        if dv is not None:
+            dv.add(data_cell)
 
         if f.get("locked") or f.get("is_formula"):
             # System/formula-managed -- never written; no formula text is
@@ -181,8 +235,11 @@ def write_template(population_result: PopulationResult, schema: dict, output_pat
             continue  # management's manual step -- never written regardless of evidence
 
         fr = by_name.get(f["name"])
-        if fr is None or fr.status != "populated" or fr.value is None:
-            result.blank_needs_input.append(f["name"])
+        if fr is None or fr.value is None or fr.status != "populated":
+            if fr is not None and fr.status == "variant_candidate":
+                result.blank_variant_candidate.append(f["name"])
+            else:
+                result.blank_needs_input.append(f["name"])
             continue
 
         if f["type"] == "numeric":
@@ -202,19 +259,74 @@ def write_template(population_result: PopulationResult, schema: dict, output_pat
         intended_values[f["name"]] = data_cell.value
         result.written_fields.append(f["name"])
 
+    return result, intended_values
+
+
+def write_template(population_result: PopulationResult, schema: dict, output_path) -> WriteResult:
+    """Write one populated record into a fresh .xlsx built from schema's real
+    structure, then immediately re-parse and verify it. Raises
+    WriteVerificationError on any real mismatch."""
+    batch = write_template_batch([population_result], schema, output_path)
+    row = batch.row_results[0]
+    result = WriteResult(
+        output_path=batch.output_path,
+        written_fields=row.written_fields,
+        blank_needs_input=row.blank_needs_input,
+        blank_invalid_dropdown=row.blank_invalid_dropdown,
+        blank_unresolved_numeric=row.blank_unresolved_numeric,
+        blank_never_populate=row.blank_never_populate,
+        blank_variant_candidate=row.blank_variant_candidate,
+        verification=batch.verification,
+    )
+    return result
+
+
+def write_template_batch(
+    population_results: list[PopulationResult], schema: dict, output_path
+) -> BatchWriteResult:
+    """Write N populated records into ONE .xlsx, one data row each (starting
+    at DATA_ROW), sharing one set of headers/validations/protection. Raises
+    WriteVerificationError on any real mismatch across ANY row. Callers are
+    responsible for the 500-row template limit (see engine/batch.py) — this
+    function writes exactly len(population_results) rows, however many that
+    is; it does not itself split or cap.
+    """
+    fields = schema.get("fields", [])
+
+    wb = openpyxl.Workbook()
+    tmpl = wb.active
+    tmpl.title = "Template"
+    tmpl.protection.sheet = True  # required for a written cell's locked=False to mean anything
+
+    lookup_names = list((schema.get("lookups") or {}).keys())
+    lookup_col_letter = {name: get_column_letter(i) for i, name in enumerate(lookup_names, start=1)}
+
+    col_by_name, dv_by_name = _write_columns(tmpl, fields, lookup_col_letter)
+
+    row_results: list[RowWriteResult] = []
+    all_intended_values: list[dict[str, object]] = []
+    for offset, population_result in enumerate(population_results):
+        row_result, intended_values = _write_row(
+            tmpl, fields, col_by_name, dv_by_name, DATA_ROW + offset, schema, population_result
+        )
+        row_results.append(row_result)
+        all_intended_values.append(intended_values)
+
     _write_lookup_sheet(wb, schema)
     _write_instructions_sheet(wb, schema)
 
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     wb.save(output_path)
 
-    result.verification = _verify(output_path, schema, fields, intended_values)
-    if not result.verification.structure_ok or result.verification.value_mismatches:
+    verification = _verify(output_path, schema, fields, all_intended_values)
+    if not verification.structure_ok or verification.value_mismatches:
         raise WriteVerificationError(
-            f"{output_path}: structure_ok={result.verification.structure_ok}, "
-            f"value_mismatches={result.verification.value_mismatches}"
+            f"{output_path}: structure_ok={verification.structure_ok}, "
+            f"value_mismatches={verification.value_mismatches}"
         )
-    return result
+    return BatchWriteResult(
+        output_path=str(output_path), row_results=row_results, verification=verification
+    )
 
 
 def _write_lookup_sheet(wb, schema: dict) -> None:
@@ -237,10 +349,12 @@ def _write_instructions_sheet(wb, schema: dict) -> None:
 
 
 def _verify(
-    output_path, schema: dict, intended_fields: list[dict], intended_values: dict[str, object]
+    output_path, schema: dict, intended_fields: list[dict],
+    all_intended_values: list[dict[str, object]],
 ) -> VerificationReport:
     """Re-parse the just-written file with the real, existing parser and diff
-    it against what was intended -- structurally, then by value."""
+    it against what was intended -- structurally once, then by value for
+    every row."""
     reparsed = parse_template(
         str(output_path),
         filename=schema.get("filename", "written.xlsx"),
@@ -273,11 +387,15 @@ def _verify(
     wb = openpyxl.load_workbook(str(output_path), data_only=True)
     ws = wb["Template"]
     col_by_name = {f["name"]: f["column"] for f in intended_fields}
-    for name, expected in intended_values.items():
-        col = column_index_from_string(col_by_name[name])
-        actual = ws.cell(row=DATA_ROW, column=col).value
-        if actual != expected:
-            value_mismatches.append(f"{name}: wrote {expected!r}, re-read {actual!r}")
+    for offset, intended_values in enumerate(all_intended_values):
+        row = DATA_ROW + offset
+        for name, expected in intended_values.items():
+            col = column_index_from_string(col_by_name[name])
+            actual = ws.cell(row=row, column=col).value
+            if actual != expected:
+                value_mismatches.append(
+                    f"row {row} {name}: wrote {expected!r}, re-read {actual!r}"
+                )
     wb.close()
 
     return VerificationReport(

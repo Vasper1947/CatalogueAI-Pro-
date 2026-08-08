@@ -93,8 +93,9 @@ def test_real_tbk_page_writes_a_verified_real_xlsx(tmp_path, capsys):
     assert result.blank_invalid_dropdown == []
     assert result.blank_unresolved_numeric == []
     assert result.blank_never_populate == []
+    assert result.blank_variant_candidate == ["Color"]
     assert set(result.blank_needs_input) >= {
-        "Brand", "Color", "Length", "Size", "Size Unit", "Length Unit",
+        "Brand", "Length", "Size", "Size Unit", "Length Unit",
         "Selling Unit", "Quantity per Selling Unit",
     }
 
@@ -113,6 +114,7 @@ def test_real_tbk_page_writes_a_verified_real_xlsx(tmp_path, capsys):
     print(f"blank_invalid_dropdown: {result.blank_invalid_dropdown}")
     print(f"blank_unresolved_numeric: {sorted(result.blank_unresolved_numeric)}")
     print(f"blank_never_populate: {result.blank_never_populate}")
+    print(f"blank_variant_candidate: {result.blank_variant_candidate}")
     print(f"formula_fields_left_blank: {result.verification.formula_fields_left_blank}")
     print("full written row (all real schema fields, in column order):")
     for name, value in by_field.items():
