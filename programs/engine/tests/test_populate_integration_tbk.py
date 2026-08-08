@@ -98,29 +98,40 @@ def test_full_pipeline_populated_count_reported_honestly():
     result = populate_from_evidence(evidence, best)
     by = {f.name: f for f in result.fields}
 
-    # Honest, verified result: Material/Color populate (direct matches to
-    # non-numeric fields, unaffected by the gate). Length and Size BOTH now
-    # correctly stay needs_input, for the SAME real reason -- neither
+    # Honest, verified result now that populate.py runs dropdown values
+    # through schemas.vocabulary.match_to_vocabulary (see that module and
+    # populate.py's own docstring): Material's real value "Aluminum Alloy"
+    # whole-word-contains the real vocabulary term "Aluminum", so it
+    # populates the CANONICAL term, not the raw string. Color's real value
+    # ("Silver/Golden/Bronze/Black Titanium/Rose Gold/Champagne, etc.")
+    # genuinely contains THREE real vocabulary terms as whole words (Silver,
+    # Gold, Black) -- a real, honest ambiguity, not a bug -- so it becomes a
+    # variant_candidate rather than an arbitrarily-picked populated value.
+    # Length and Size both stay needs_input for the SAME real reason: neither
     # "2.4/2.5/2.7/3 Meters" (Length, a direct match) nor "8/10/12mm /
     # Customized." (Size, via the Height alias) resolves to one specific
-    # measurement (see populate.py's _is_confirmed_numeric). The gate no
-    # longer cares how the field name was matched, only whether the value is
-    # actually one confirmed number.
-    assert by["Material"].status == "populated" and by["Material"].value == "Aluminum Alloy"
-    assert by["Color"].status == "populated"
+    # measurement (see populate.py's _is_confirmed_numeric).
+    assert by["Material"].status == "populated"
+    assert by["Material"].value == "Aluminum"
+    assert by["Material"].reason == "whole_word_containment"
+    assert by["Color"].status == "variant_candidate"
+    assert by["Color"].value is None
+    assert set(by["Color"].candidates) == {"Silver", "Gold", "Black"}
     assert by["Length"].status == "needs_input"  # direct match, but not one confirmed number
+    assert by["Length"].reason == "not_one_confirmed_number"
     assert by["Length"].value is None
     assert by["Size"].status == "needs_input"  # aliased, and also not one confirmed number
+    assert by["Size"].reason == "not_one_confirmed_number"
     assert by["Size"].value is None
 
-    assert result.populated_count == 2
+    assert result.populated_count == 1
     # Genuinely incomplete for real reasons: Brand was never stated on the
-    # page (no name/description JSON-LD, no Brand vocabulary hit), and
-    # Length/Size/Size Unit/Length Unit/Selling Unit/Quantity per Selling Unit
-    # have no usable evidence either.
+    # page (no name/description JSON-LD, no Brand vocabulary hit), Color is a
+    # real, unresolved variant ambiguity, and Length/Size/Size Unit/Length
+    # Unit/Selling Unit/Quantity per Selling Unit have no usable evidence.
     assert result.status == "incomplete"
     assert set(result.missing_required) == {
-        "Brand", "Length", "Size", "Size Unit", "Length Unit",
+        "Brand", "Color", "Length", "Size", "Size Unit", "Length Unit",
         "Selling Unit", "Quantity per Selling Unit",
     }
 
@@ -138,5 +149,8 @@ def test_real_ingest_pipeline_reports_the_same_honest_result(tmp_path):
 
     assert res["status"] == "template_matched"
     assert res["detection"]["matched"][-1] == "Edge Trim"
-    assert res["population"]["populated_count"] == 2
+    # 1, not 2: Color is a real variant_candidate now (see
+    # test_full_pipeline_populated_count_reported_honestly), not silently
+    # counted as populated with a value that doesn't fit the vocabulary.
+    assert res["population"]["populated_count"] == 1
     assert res["population"]["status"] == "incomplete"

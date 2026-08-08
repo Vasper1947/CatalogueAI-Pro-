@@ -12,13 +12,15 @@ detect.py's real 5-way tie among the Edge Trims & Profiles family resolves to
 "Edge Trim" -- the same honest reasoning applies here unchanged; this file
 only adds the write_template step on top of that already-proven result.
 
-PREDICTED, now CONFIRMED: the real "Material" evidence value "Aluminum Alloy"
-does not exactly match the real Edge Trim schema's Material vocabulary
-(["Aluminum", "Stainless Steel", "PVC", "Brass", "Chrome"]) -- populate.py's
-looser evidence-matching bar populates it anyway (see
-test_full_pipeline_populated_count_reported_honestly), but write_template's
-stricter, vocabulary-bound dropdown check correctly leaves it blank rather
-than write an invalid dropdown value into the file.
+UPDATED after populate.py was wired to schemas.vocabulary.match_to_vocabulary
+(see that module and programs/engine/tests/test_populate_integration_tbk.py):
+Material's real value "Aluminum Alloy" now populates the CANONICAL vocabulary
+term "Aluminum" (whole-word containment), which write_template writes
+successfully -- no longer a blank_invalid_dropdown case. Color's real value
+genuinely contains three real vocabulary terms as whole words (Silver, Gold,
+Black) -- a real, honest ambiguity -- so populate.py reports it as
+variant_candidate rather than guessing one, and write_template leaves it
+blank (blank_needs_input, since it was never "populated" in the first place).
 """
 
 import json
@@ -82,24 +84,17 @@ def test_real_tbk_page_writes_a_verified_real_xlsx(tmp_path, capsys):
 
     assert "Floor Price" not in result.written_fields  # never populated regardless
 
-    # The real, confirmed shape of this specific real-world case: populate.py
-    # populates Material ("Aluminum Alloy") and Color (the raw multi-option
-    # scraped string) because its evidence bar has no vocabulary check -- but
-    # BOTH are dropdown-typed in the real schema and NEITHER value exactly
-    # matches its real, controlled vocabulary (Material's vocab is
-    # ["Aluminum", "Stainless Steel", "PVC", "Brass", "Chrome"]; Color's is
-    # ten specific named shades). write_template's stricter, vocabulary-bound
-    # check correctly refuses to write either -- so, honestly, NOTHING is
-    # written into this real file: every real field the page could plausibly
-    # supply fails the schema's own controlled-vocabulary bar, and every other
-    # field simply has no usable evidence at all. A fully-blank-but-
-    # structurally-correct file is still a legitimate, honest output here.
-    assert result.written_fields == []
-    assert result.blank_invalid_dropdown == ["Material", "Color"]
+    # The real, confirmed shape of this specific real-world case, now that
+    # populate.py itself runs dropdown values through vocabulary matching:
+    # Material populates the file with its real, canonical vocabulary term.
+    # Color is a genuine variant_candidate (three real matches: Silver, Gold,
+    # Black) -- never populated, so write_template leaves it blank.
+    assert result.written_fields == ["Material"]
+    assert result.blank_invalid_dropdown == []
     assert result.blank_unresolved_numeric == []
     assert result.blank_never_populate == []
     assert set(result.blank_needs_input) >= {
-        "Brand", "Length", "Size", "Size Unit", "Length Unit",
+        "Brand", "Color", "Length", "Size", "Size Unit", "Length Unit",
         "Selling Unit", "Quantity per Selling Unit",
     }
 

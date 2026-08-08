@@ -15,18 +15,39 @@ value must resolve to one specific measurement, not a multi-option/
 categorical passthrough like "8/10/12mm" or "2.4/2.5/2.7/3 Meters". Whether a
 value is actually one confirmed number doesn't depend on how its field name
 was matched — a direct-match evidence field can state a multi-option spec
-just as easily as an aliased one, and both are equally unconfirmed. A
-non-numeric field (Brand, Grade, Color, ...) is not subject to this extra
-check at all — resolve_field's own guard (for an aliased field) or a bare
-non-blank value (for a direct match) is the only bar for it, same as before.
+just as easily as an aliased one, and both are equally unconfirmed.
+
+A match to a DROPDOWN schema field is run through
+schemas.vocabulary.match_to_vocabulary against that field's real, controlled
+vocabulary (see that module for the strictest-first matching rule). Three
+outcomes, never collapsed into one:
+  * a determinate match populates the CANONICAL vocabulary term (never the
+    raw string), with FieldResult.reason recording which method matched —
+    for auditability, same discipline as detect.py's tie resolutions.
+  * no match at any level -> needs_input, FieldResult.reason="not_in_vocabulary"
+    — deliberately distinct from FieldResult.reason="no_evidence" (a field
+    with no evidence row at all). These are different problems: one has a
+    real value that just doesn't fit the controlled list; the other has
+    nothing. Collapsing them would hide which one a human needs to fix.
+  * 2+ vocabulary terms present in the same raw value (e.g. a listing that
+    genuinely offers "Silver/Golden/Bronze") -> status="variant_candidate",
+    never resolved by picking one. FieldResult.candidates lists every
+    matched term — real signal (one listing, N SKUs), recorded, not guessed
+    away. Still contributes to missing_required if the field is required,
+    since nothing was actually populated.
+
+A non-dropdown, non-numeric field (plain string: Brand's free-text form,
+Description, ...) keeps the original bar: any non-blank value populates,
+verbatim.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from common.units import normalize_value
 from schemas.aliases import resolve_field
+from schemas.vocabulary import find_whole_word_matches, match_to_vocabulary
 
 from engine.detect import canonical, writable_fields
 
@@ -35,8 +56,15 @@ from engine.detect import canonical, writable_fields
 class FieldResult:
     name: str
     required: bool
-    status: str  # "populated" | "needs_input"
+    status: str  # "populated" | "needs_input" | "variant_candidate"
     value: str | None = None
+    # populated dropdown: the match_to_vocabulary method ("exact", "normalized", ...).
+    # needs_input: "no_evidence" | "not_one_confirmed_number" | "not_in_vocabulary".
+    # variant_candidate: the ambiguous method ("whole_word_containment_ambiguous", ...).
+    # Anything else (plain string/numeric populated fields): None -- no method to report.
+    reason: str | None = None
+    # variant_candidate only: every vocabulary term found in the raw value.
+    candidates: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -125,18 +153,72 @@ def populate_from_evidence(bkpack_evidence, schema) -> PopulationResult:
         name = f["name"]
         required = bool(f.get("required"))
         canon = canonical(name)
-        value = values.get(canon)
-        if value is not None and f.get("type") == "numeric" and not _is_confirmed_numeric(value):
-            value = None  # matched (direct or aliased), but not one confirmed value
-        if value is not None:
+        raw_value = values.get(canon)
+
+        if raw_value is None:
             results.append(
-                FieldResult(name=name, required=required, status="populated", value=value)
+                FieldResult(name=name, required=required, status="needs_input", reason="no_evidence")
             )
-            populated += 1
-        else:
-            results.append(FieldResult(name=name, required=required, status="needs_input"))
             if required:
                 missing_required.append(name)
+            continue
+
+        if f.get("type") == "numeric":
+            if not _is_confirmed_numeric(raw_value):
+                results.append(
+                    FieldResult(
+                        name=name, required=required, status="needs_input",
+                        reason="not_one_confirmed_number",
+                    )
+                )
+                if required:
+                    missing_required.append(name)
+                continue
+            results.append(
+                FieldResult(name=name, required=required, status="populated", value=raw_value)
+            )
+            populated += 1
+            continue
+
+        if f.get("type") == "dropdown" and f.get("vocabulary"):
+            vocab = f["vocabulary"]
+            matched_term, method, _confidence = match_to_vocabulary(raw_value, vocab)
+            if matched_term is not None:
+                results.append(
+                    FieldResult(
+                        name=name, required=required, status="populated",
+                        value=matched_term, reason=method,
+                    )
+                )
+                populated += 1
+                continue
+            if method.endswith("_ambiguous"):
+                candidates = find_whole_word_matches(raw_value, vocab)
+                results.append(
+                    FieldResult(
+                        name=name, required=required, status="variant_candidate",
+                        reason=method, candidates=candidates,
+                    )
+                )
+                if required:
+                    missing_required.append(name)
+                continue
+            results.append(
+                FieldResult(
+                    name=name, required=required, status="needs_input",
+                    reason="not_in_vocabulary",
+                )
+            )
+            if required:
+                missing_required.append(name)
+            continue
+
+        # Plain string field (or a dropdown with no resolvable vocabulary):
+        # the original bar -- any non-blank value populates, verbatim.
+        results.append(
+            FieldResult(name=name, required=required, status="populated", value=raw_value)
+        )
+        populated += 1
 
     status = "ready_for_review" if not missing_required else "incomplete"
     return PopulationResult(
