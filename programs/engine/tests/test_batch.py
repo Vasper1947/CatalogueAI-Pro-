@@ -129,6 +129,23 @@ def test_empty_records_list_produces_empty_summary(tmp_path):
     assert summary.written_files == []
 
 
+def test_forced_schema_override_skips_detection_entirely(tmp_path):
+    schema = _schema(["Cat", "Widget A"])
+    other = _schema(["Cat", "Widget B"])  # deliberately never passed to schemas=
+    records = [("p1", _ev())]
+
+    # With no forced_schema, [schema, other] would be a genuine ambiguous tie
+    # (see test_genuinely_ambiguous_category_is_reported_and_excluded_from_output).
+    # forced_schema bypasses match_template entirely -- a human's explicit,
+    # not-a-guess override.
+    summary = run_batch(records, [schema, other], tmp_path, forced_schema=schema)
+
+    assert len(summary.matched) == 1
+    assert summary.category_ambiguous == []
+    assert len(summary.written_files) == 1
+    assert summary.written_files[0].category_path == ["Cat", "Widget A"]
+
+
 def test_a_chunk_write_failure_is_reported_not_raised(tmp_path, monkeypatch):
     # A self-verification failure for one chunk must not crash the whole
     # batch run or silently disappear -- it lands in write_failures.

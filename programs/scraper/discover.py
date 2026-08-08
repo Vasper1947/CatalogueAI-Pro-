@@ -41,6 +41,57 @@ def _http_get(url: str, *, timeout: float = 15.0) -> str | None:
         return None
 
 
+def fetch_html(url: str, *, timeout: float = 15.0) -> str | None:
+    """Plain HTTP GET for page markup — the fast, reliable path for a
+    static-HTML page (this project's own real-page testing found it
+    consistently more reliable than Playwright's browser-level navigation
+    under this environment's network conditions; see ROADMAP.md's Blocked
+    section). Returns None on any failure; never raises. A caller that needs
+    JS-rendered markup can still fall back to extract_structured_data's own
+    Playwright rendering by passing html=None."""
+    return _http_get(url, timeout=timeout)
+
+
+def fetch_bytes(url: str, *, timeout: float = 15.0) -> bytes | None:
+    """Plain HTTP GET for binary content (a product photo, a media file) —
+    same reasoning as fetch_html, but the raw, undecoded bytes. Returns None
+    on any failure; never raises, never fabricates placeholder bytes."""
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.read()
+    except (OSError, ValueError, urllib.error.URLError, http.client.HTTPException):
+        return None
+
+
+_SKIP_LINK_RE = re.compile(r"(?i)^(mailto:|tel:|javascript:|#)")
+
+
+def discover_links(page_html: str, base_url: str) -> list[str]:
+    """Same-domain, absolute, deduplicated links found on a page — a general
+    candidate list for a category/listing page's product links. Does not
+    itself decide which candidates are product pages (a caller probes each
+    the same way it would probe any page: does it actually have usable
+    evidence?); a page with no same-domain anchor links yields []. The page's
+    own URL (fragment-stripped) is excluded so it never candidates itself."""
+    soup = BeautifulSoup(page_html or "", "html.parser")
+    base_host = urlparse(base_url).netloc
+    self_url = base_url.split("#", 1)[0]
+    seen: set[str] = set()
+    links: list[str] = []
+    for tag in soup.find_all("a", href=True):
+        href = str(tag["href"]).strip()
+        if not href or _SKIP_LINK_RE.match(href):
+            continue
+        resolved = urljoin(base_url, href).split("#", 1)[0]
+        if urlparse(resolved).netloc != base_host or resolved == self_url:
+            continue
+        if resolved not in seen:
+            seen.add(resolved)
+            links.append(resolved)
+    return links
+
+
 def _get_robots(
     base_url: str, *, robots_txt: str | None = None
 ) -> urllib.robotparser.RobotFileParser:

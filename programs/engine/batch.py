@@ -76,6 +76,7 @@ def run_batch(
     output_dir,
     *,
     base_filename: str = "products",
+    forced_schema: dict | None = None,
 ) -> BatchRunSummary:
     """records: [(record_id, evidence_rows_as_dicts), ...] -- typically one
     entry per staged product (see export.staging.load_staged_evidence_rows).
@@ -85,6 +86,14 @@ def run_batch(
     in a genuine unresolved category tie, are recorded in the summary and
     excluded from every written file -- never dropped silently, never forced
     into a guessed category.
+
+    ``forced_schema``, when given, is a human's explicit override (e.g. the
+    CLI's --category-override) of automatic detection: every record is
+    treated as matched to this exact schema, skipping match_template
+    entirely. This is a deliberate manual decision, not a guess dressed up as
+    one -- it exists for the real case where a human already knows the
+    correct BK category and match_template's own thresholds are getting in
+    the way (e.g. a genuine ambiguous_tie the evidence itself cannot resolve).
 
     Matched records are grouped by their detected category_path (one schema
     = one set of columns = one file), then each group is chunked to at most
@@ -99,16 +108,22 @@ def run_batch(
     schema_by_path: dict[tuple, dict] = {}
 
     for record_id, evidence in records:
-        best, confidence, candidates = match_template(evidence, schemas)
-        tied = [c for c in candidates if c.ambiguous_tie]
-        if tied:
-            summary.category_ambiguous.append(
-                RecordOutcome(
-                    record_id=record_id, status="category_ambiguous", confidence=confidence,
-                    reason=f"unresolved tie among {len(tied)} candidates at precision {confidence:.3f}",
+        if forced_schema is not None:
+            best, confidence = forced_schema, 1.0
+        else:
+            best, confidence, candidates = match_template(evidence, schemas)
+            tied = [c for c in candidates if c.ambiguous_tie]
+            if tied:
+                summary.category_ambiguous.append(
+                    RecordOutcome(
+                        record_id=record_id, status="category_ambiguous", confidence=confidence,
+                        reason=(
+                            f"unresolved tie among {len(tied)} candidates "
+                            f"at precision {confidence:.3f}"
+                        ),
+                    )
                 )
-            )
-            continue
+                continue
         if best is None:
             summary.no_template_match.append(
                 RecordOutcome(

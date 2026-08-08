@@ -30,6 +30,7 @@ SOURCE_PACKAGES = [
     "scraper",
     "pdfworker",
     "engine",
+    "cli",
 ]
 
 
