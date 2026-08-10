@@ -26,7 +26,12 @@ from schemas.classify import (
     top_suggestion,
 )
 
-from scraper.discover import extract_spec_table, find_media
+from scraper.discover import (
+    extract_page_metadata,
+    extract_spec_table,
+    find_media,
+    metadata_to_fields,
+)
 
 # Confidence reflects provenance / extraction path. A spec table's explicit
 # key/value rows are the highest-trust scrape signal, above schema.org JSON-LD;
@@ -36,6 +41,12 @@ from scraper.discover import extract_spec_table, find_media
 CONFIDENCE_SPEC_TABLE = 0.95
 CONFIDENCE_SPEC_TABLE_UNCERTAIN = 0.4
 CONFIDENCE_STRUCTURED = 0.9
+# Page metadata (Open Graph / Twitter Card / <title>/<h1>/meta description --
+# see metadata_fallback_rows) is real, human-authored page-summary text, not
+# a guess, but it is a general SEO/social-share signal, not schema.org
+# Product markup specifically about this item -- less authoritative than
+# JSON-LD. This is exactly the "looser (non-structured) fallback" this tier
+# was already reserved for above; metadata_fallback_rows is its first use.
 CONFIDENCE_LOOSE = 0.6
 # A Brand inferred by a whole-word hit against the schema's own closed Brand
 # vocabulary. Above the loose text fallback (0.6, unconstrained free text) because
@@ -196,6 +207,34 @@ def spec_table_rows(
     return rows
 
 
+def metadata_fallback_rows(
+    jsonld_fields: dict, metadata_fields: dict, page_url: str, *, record_id: str
+) -> list[EvidenceRow]:
+    """name/description EvidenceRows sourced from page metadata (see
+    scraper.discover.extract_page_metadata/metadata_to_fields) -- ONLY for a
+    field JSON-LD did not already provide; a JSON-LD value is NEVER
+    overridden. Tagged at CONFIDENCE_LOOSE (see that constant's own
+    reasoning). This is the root-cause fix for pages with no Product JSON-LD
+    at all: previously such pages contributed no name/description evidence
+    whatsoever, which meant no content signal for classify_category or
+    detect.py's content tie-break, and Brand was never inferable from
+    product text either.
+    """
+    rows: list[EvidenceRow] = []
+    for field_name in ("name", "description"):
+        if jsonld_fields.get(field_name):
+            continue  # JSON-LD already has it -- never overridden
+        value = metadata_fields.get(field_name)
+        if value:
+            rows.append(
+                EvidenceRow(
+                    record_id=record_id, field=field_name, value=value,
+                    source_uri=page_url, method="scrape", confidence=CONFIDENCE_LOOSE,
+                )
+            )
+    return rows
+
+
 def match_brand_from_vocabulary(
     product_text, schema, *, source_uri: str, record_id: str
 ) -> EvidenceRow | None:
@@ -307,20 +346,35 @@ def build_pack_from_fields(
     record_id = _record_id(fields, page_url)
     json_ld_rows = to_evidence_rows(fields, page_url, structured=structured)
     spec_rows = spec_table_rows(page_html, page_url, record_id=record_id) if page_html else []
-    rows = json_ld_rows + spec_rows
-    if not rows:
+    if not json_ld_rows and not spec_rows:
+        # No product-shaped evidence at all -- page metadata (a <title>, a
+        # meta description) exists on almost every real page, product or
+        # not, so it must never be what DECIDES a page is capturable, only
+        # what ENRICHES a page that already qualified via JSON-LD or a real
+        # spec table. Without this gate, a blog/about/nav page would get
+        # "captured" off its SEO tags alone.
         return []
-    # classify_category (inside classification_rows) still keys off
-    # fields.get("name")/description, which typically only comes from JSON-LD —
-    # a spec-table-only page (no JSON-LD, no page-title/meta fallback, which
-    # doesn't exist yet — a separate, unaddressed gap) still gets NO
-    # suggested_category row here. This task fixes evidence capture, not
-    # classification coverage; that gap is not touched or incidentally solved.
-    rows = rows + classification_rows(fields, page_url, schemas=schemas)
+    # Page metadata (Open Graph/Twitter Card/<title>/<h1>/meta description)
+    # fills name/description ONLY when JSON-LD provided neither -- see
+    # metadata_fallback_rows. This is the root-cause fix for a REAL product
+    # page with no Product JSON-LD at all (confirmed by the spec_rows check
+    # above): it used to contribute zero name/description evidence, so
+    # classify_category, the Brand-vocabulary text match, and detect.py's
+    # content tie-break all had nothing to search.
+    metadata_fields = metadata_to_fields(extract_page_metadata(page_html, page_url)) if page_html else {}
+    meta_rows = metadata_fallback_rows(fields, metadata_fields, page_url, record_id=record_id)
+    rows = json_ld_rows + spec_rows + meta_rows
+    # classify_category/brand-vocab matching (inside classification_rows/
+    # brand_vocab_rows) key off name/description -- merge metadata's fallback
+    # in too (JSON-LD's own value always wins on overlap, same rule as the
+    # evidence rows above), so a spec-table-only page's real page title/
+    # description is real content to classify and content-tie-break against.
+    classification_fields = {**metadata_fields, **fields}
+    rows = rows + classification_rows(classification_fields, page_url, schemas=schemas)
     # Infer Brand from the category's vocabulary, but only if the page did not
     # already provide a Brand field of its own (no overwrite, no duplicate).
     if not any(r.field.strip().lower() == "brand" for r in rows):
-        rows = rows + brand_vocab_rows(fields, page_url, schemas=schemas)
+        rows = rows + brand_vocab_rows(classification_fields, page_url, schemas=schemas)
     if job_id is not None:
         media_refs = find_media(page_html, page_url) if page_html else []
         stage_capture(

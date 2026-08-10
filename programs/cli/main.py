@@ -39,6 +39,7 @@ from scraper.discover import (
     fetch_bytes,
     fetch_html,
     find_media,
+    resolve_product_image,
     robots_allows,
 )
 
@@ -55,6 +56,7 @@ class CaptureOutcome:
     status: str  # "captured" | "blocked" | "skipped"
     reason: str | None = None
     record_id: str | None = None
+    image_captured: bool = False
 
 
 @dataclass
@@ -164,7 +166,7 @@ def capture_products(
             continue
 
         image_bytes_list = []
-        image_url = fields.get("image")
+        image_url = resolve_product_image(fields, html, url)
         if image_url:
             raw = fetch_bytes(image_url)
             if raw:
@@ -184,10 +186,13 @@ def capture_products(
 
         record_id = rows[0].record_id
         captured += 1
-        outcomes.append(CaptureOutcome(url=url, status="captured", record_id=record_id))
+        outcomes.append(
+            CaptureOutcome(url=url, status="captured", record_id=record_id, image_captured=bool(image_bytes_list))
+        )
         print(
             f"[{i}/{len(candidates)}] CAPTURED {url}  "
-            f"(record={record_id}, {len(rows)} evidence fields, {len(media_refs)} media refs)"
+            f"(record={record_id}, {len(rows)} evidence fields, {len(media_refs)} media refs, "
+            f"image={'yes' if image_bytes_list else 'no'})"
         )
     return outcomes
 
@@ -267,10 +272,12 @@ def _print_final_summary(result: RunResult) -> None:
     captured = sum(1 for c in result.captures if c.status == "captured")
     blocked = sum(1 for c in result.captures if c.status == "blocked")
     skipped = sum(1 for c in result.captures if c.status == "skipped")
+    images = sum(1 for c in result.captures if c.image_captured)
     print("\n" + "=" * 60)
     print("FINAL SUMMARY")
     print(f"  candidates tried : {result.candidates_tried}")
     print(f"  captured         : {captured}")
+    print(f"  images captured  : {images}")
     print(f"  blocked          : {blocked}")
     print(f"  skipped          : {skipped}")
     if result.batch_summary is not None:
@@ -315,8 +322,14 @@ def _write_report(result: RunResult, out_dir: Path) -> Path:
     lines.append(f"kind: {'category page' if result.is_category else 'product page'}")
     lines.append("")
     lines.append(f"candidates tried: {result.candidates_tried}")
+    images = sum(1 for c in result.captures if c.image_captured)
+    captured = sum(1 for c in result.captures if c.status == "captured")
+    lines.append(f"images captured: {images}/{captured}")
     for c in result.captures:
-        detail = f" ({c.reason})" if c.reason else f" (record={c.record_id})"
+        if c.reason:
+            detail = f" ({c.reason})"
+        else:
+            detail = f" (record={c.record_id}, image={'yes' if c.image_captured else 'no'})"
         lines.append(f"  {c.status.upper():9s} {c.url}{detail}")
     lines.append("")
 

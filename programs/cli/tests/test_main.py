@@ -100,6 +100,37 @@ def test_capture_products_stops_at_limit(monkeypatch):
     assert len(outcomes) == 2  # loop stops once the limit is reached
 
 
+def test_capture_products_uses_resolve_product_image_not_raw_field(monkeypatch):
+    # The image now comes from resolve_product_image (JSON-LD -> metadata ->
+    # gallery scan), not a raw fields.get("image") that only ever worked
+    # when JSON-LD was present.
+    import cli.main as cli_main
+
+    monkeypatch.setattr(cli_main, "robots_allows", lambda url: True)
+    monkeypatch.setattr(
+        cli_main, "_probe_page",
+        lambda url: ("<html>real</html>", {}, [("Material", "Steel")], []),  # no JSON-LD image
+    )
+    monkeypatch.setattr(cli_main, "resolve_product_image", lambda fields, html, url: "https://ex.com/og.jpg")
+    fetched = {}
+
+    def _fake_fetch_bytes(url):
+        fetched["url"] = url
+        return b"bytes"
+
+    monkeypatch.setattr(cli_main, "fetch_bytes", _fake_fetch_bytes)
+
+    class _FakeRow:
+        record_id = "rec-1"
+
+    monkeypatch.setattr(cli_main, "build_pack_from_fields", lambda *a, **k: [_FakeRow()])
+
+    outcomes = capture_products(["https://example.com/p/1"], "job1", tmp_staging_root(), limit=1)
+
+    assert fetched["url"] == "https://ex.com/og.jpg"
+    assert outcomes[0].image_captured is True
+
+
 def test_capture_products_reports_robots_block(monkeypatch):
     import cli.main as cli_main
 
