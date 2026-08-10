@@ -397,6 +397,153 @@ def render_and_snapshot(page_url: str) -> tuple[str | None, bytes | None]:
         return None, None
 
 
+def _meta_content(soup: BeautifulSoup, attr: str, key: str) -> str | None:
+    tag = soup.find("meta", attrs={attr: key})
+    if tag is None:
+        return None
+    content = tag.get("content")
+    return content.strip() if isinstance(content, str) and content.strip() else None
+
+
+def extract_page_metadata(page_html: str, base_url: str) -> dict:
+    """Return whatever of {og:title, og:image, og:description, twitter:image,
+    title, h1, meta_description} is actually present on the page — an absent
+    tag is simply absent from the result, never invented. Image values are
+    resolved to absolute URLs against base_url. This runs regardless of
+    whether the page has schema.org/Product JSON-LD; see
+    metadata_to_fields/resolve_product_image for how it's used as a fallback
+    that never overrides a JSON-LD value when both are present.
+    """
+    soup = BeautifulSoup(page_html or "", "html.parser")
+    result: dict[str, str] = {}
+
+    og_title = _meta_content(soup, "property", "og:title")
+    if og_title:
+        result["og:title"] = og_title
+    og_description = _meta_content(soup, "property", "og:description")
+    if og_description:
+        result["og:description"] = og_description
+    og_image = _meta_content(soup, "property", "og:image")
+    if og_image:
+        result["og:image"] = urljoin(base_url, og_image)
+    twitter_image = _meta_content(soup, "name", "twitter:image")
+    if twitter_image:
+        result["twitter:image"] = urljoin(base_url, twitter_image)
+    meta_description = _meta_content(soup, "name", "description")
+    if meta_description:
+        result["meta_description"] = meta_description
+
+    title_tag = soup.find("title")
+    title_text = title_tag.get_text(strip=True) if title_tag else ""
+    if title_text:
+        result["title"] = title_text
+
+    h1_tag = soup.find("h1")
+    h1_text = h1_tag.get_text(strip=True) if h1_tag else ""
+    if h1_text:
+        result["h1"] = h1_text
+
+    return result
+
+
+def metadata_to_fields(metadata: dict) -> dict:
+    """Reduce extract_page_metadata's raw tag dict to the same {"name",
+    "description", "image"} shape extract_structured_data's JSON-LD fields
+    use, picking the most likely-accurate source present for each: og:title
+    is usually a curated, site-suffix-free product title (better than
+    <title>, which often carries " | Site Name"); h1 is the real on-page
+    heading, a better fallback than <title> when there's no og:title.
+    og:description is a deliberately human-authored summary, preferred over
+    the generic meta description tag when both exist."""
+    fields: dict[str, str] = {}
+    name = metadata.get("og:title") or metadata.get("h1") or metadata.get("title")
+    if name:
+        fields["name"] = name
+    description = metadata.get("og:description") or metadata.get("meta_description")
+    if description:
+        fields["description"] = description
+    image = metadata.get("og:image") or metadata.get("twitter:image")
+    if image:
+        fields["image"] = image
+    return fields
+
+
+_LOGO_ICON_RE = re.compile(r"(?i)(logo|icon|sprite|favicon|avatar|spinner|placeholder)")
+_GALLERY_CONTAINER_RE = re.compile(r"(?i)(product|gallery)")
+_MIN_GALLERY_DIMENSION = 100  # px -- only rejects an image whose HTML explicitly states a small size
+
+
+def _within_product_gallery_container(tag) -> bool:
+    """True if any ancestor's class/id names contain "product" or "gallery"
+    — a structural signal only, no site-specific selectors."""
+    for parent in tag.parents:
+        if parent is None or not hasattr(parent, "get"):
+            break
+        classes = parent.get("class") or []
+        haystack = " ".join(classes) + " " + str(parent.get("id") or "")
+        if _GALLERY_CONTAINER_RE.search(haystack):
+            return True
+    return False
+
+
+def _stated_dimension_too_small(tag) -> bool:
+    for attr in ("width", "height"):
+        value = tag.get(attr)
+        if value is None:
+            continue
+        try:
+            if int(str(value).strip()) < _MIN_GALLERY_DIMENSION:
+                return True
+        except ValueError:
+            continue
+    return False
+
+
+def extract_gallery_images(page_html: str, base_url: str) -> list[str]:
+    """Likely product images from the page's own <img> tags, using structural
+    signals only: inside a container whose class/id names contain "product"
+    or "gallery", excluding filenames that look like a logo/icon/sprite, and
+    excluding an image whose HTML explicitly states a small (<100px)
+    width/height (an image with no stated dimensions is not excluded on that
+    basis — absence of a size is not evidence of a small one). No
+    site-specific selectors. Deduplicated, absolute URLs. A page with no
+    matching image yields []."""
+    soup = BeautifulSoup(page_html or "", "html.parser")
+    results: list[str] = []
+    seen: set[str] = set()
+    for img in soup.find_all("img"):
+        if not _within_product_gallery_container(img):
+            continue
+        src = img.get("src") or img.get("data-src")
+        if not src or not str(src).strip():
+            continue
+        if _LOGO_ICON_RE.search(str(src)):
+            continue
+        if _stated_dimension_too_small(img):
+            continue
+        resolved = urljoin(base_url, str(src).strip())
+        if resolved not in seen:
+            seen.add(resolved)
+            results.append(resolved)
+    return results
+
+
+def resolve_product_image(fields: dict, page_html: str, base_url: str) -> str | None:
+    """The best available product image URL: JSON-LD's own "image" field
+    first (most authoritative, never overridden), then Open Graph/Twitter
+    Card metadata, then a structural scan of the page's own gallery <img>
+    tags. None if nothing real is found at any level — never guessed."""
+    if fields.get("image"):
+        return fields["image"]
+    if not page_html:
+        return None
+    meta_image = metadata_to_fields(extract_page_metadata(page_html, base_url)).get("image")
+    if meta_image:
+        return meta_image
+    gallery = extract_gallery_images(page_html, base_url)
+    return gallery[0] if gallery else None
+
+
 def extract_spec_table(page_html: str) -> list[tuple[str, str]]:
     """Extract (key, value) spec pairs from two-column tables and definition lists.
 
