@@ -19,8 +19,15 @@ term "Aluminum" (whole-word containment), which write_template writes
 successfully -- no longer a blank_invalid_dropdown case. Color's real value
 genuinely contains three real vocabulary terms as whole words (Silver, Gold,
 Black) -- a real, honest ambiguity -- so populate.py reports it as
-variant_candidate rather than guessing one, and write_template leaves it
-blank (blank_needs_input, since it was never "populated" in the first place).
+variant_candidate rather than guessing one.
+
+UPDATED AGAIN after populate.py was wired to
+common.units.parse_multi_option_numeric: Length ("2.4/2.5/2.7/3 Meters") and
+Size ("8/10/12mm / Customized.", via the Height alias) are ALSO real
+variant_candidates now -- each resolves to real stocked-size options, not a
+single confirmed measurement. write_template leaves all three
+(Color/Length/Size) blank (blank_variant_candidate), since none was ever
+"populated" in the first place.
 """
 
 import json
@@ -85,18 +92,18 @@ def test_real_tbk_page_writes_a_verified_real_xlsx(tmp_path, capsys):
     assert "Floor Price" not in result.written_fields  # never populated regardless
 
     # The real, confirmed shape of this specific real-world case, now that
-    # populate.py itself runs dropdown values through vocabulary matching:
+    # populate.py runs dropdown values through vocabulary matching AND
+    # numeric multi-option values through parse_multi_option_numeric:
     # Material populates the file with its real, canonical vocabulary term.
-    # Color is a genuine variant_candidate (three real matches: Silver, Gold,
-    # Black) -- never populated, so write_template leaves it blank.
+    # Color/Length/Size are all genuine variant_candidates (real multi-option
+    # values) -- never populated, so write_template leaves them blank.
     assert result.written_fields == ["Material"]
     assert result.blank_invalid_dropdown == []
     assert result.blank_unresolved_numeric == []
     assert result.blank_never_populate == []
-    assert result.blank_variant_candidate == ["Color"]
+    assert set(result.blank_variant_candidate) == {"Color", "Length", "Size"}
     assert set(result.blank_needs_input) >= {
-        "Brand", "Length", "Size", "Size Unit", "Length Unit",
-        "Selling Unit", "Quantity per Selling Unit",
+        "Brand", "Size Unit", "Length Unit", "Selling Unit", "Quantity per Selling Unit",
     }
 
     wb = openpyxl.load_workbook(out, data_only=True)

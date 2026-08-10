@@ -5,14 +5,16 @@ uses — so a field arriving under an alias name gets a fair chance to populate.
 This does NOT lower the bar for what counts as a confirmed value. ANY match to
 a NUMERIC schema field — direct or aliased — gets one extra check beyond the
 existing aliases.py guard: the value must resolve to one specific measurement
-via common/units.py's normalize_value (a scalar with a real unit), not a
-multi-option/categorical passthrough like "8/10/12mm" or "2.4/2.5/2.7/3
-Meters" (the aliases.py single_axis_length guard already accepts a same-axis
-option list like "8/10/12mm" — see aliases.py's own docstring — so without
-this extra check an aliased match would wrongly populate; and a DIRECT match
-can state a multi-option spec just as easily, so it gets the same scrutiny).
-A non-numeric target (Brand, Grade, Color, ...) is unaffected by this extra
-check, whether reached directly or via alias.
+via common/units.py's normalize_value (a scalar with a real unit), not an
+unresolved multi-axis passthrough like "300 x 600 mm" (the aliases.py
+single_axis_length guard already rejects that outright) — a same-axis option
+list like "8/10/12mm" or "2.4/2.5/2.7/3 Meters" is a DIFFERENT case: it
+resolves via common/units.py's parse_multi_option_numeric into
+status="variant_candidate" (real signal, one listing, N stocked sizes),
+never silently populated with one guessed option and never silently
+dropped to plain needs_input either. A non-numeric target (Brand, Grade,
+Color, ...) is unaffected by any of this, whether reached directly or via
+alias.
 """
 
 from engine.populate import populate_from_evidence
@@ -52,15 +54,16 @@ def test_aliased_single_unambiguous_value_now_populates():
     assert by["Length"].status == "populated"
 
 
-def test_aliased_multi_option_numeric_value_stays_needs_input_via_new_gate_not_never_attempted():
+def test_aliased_multi_option_numeric_value_becomes_variant_candidate_not_never_attempted():
     # "Height: 8/10/12mm" passes the EXISTING aliases.py guard (single_axis_length
     # already accepts a same-axis option list) -- resolve_field DOES map it to
-    # "Size". The NEW gate here is what still keeps it out: normalize_value
-    # cannot resolve "8/10/12mm" to one specific scalar, so it is not a
-    # confirmed value. A companion "Manufacturer" -> "Brand" alias (no guard,
-    # non-numeric target) populates in the SAME call, proving resolution
-    # genuinely ran for this evidence set -- Size's rejection is the new
-    # value-confirmation gate, not resolve_field never being attempted.
+    # "Size". The gate here is what keeps it from being a plain populated
+    # value: normalize_value cannot resolve "8/10/12mm" to one specific
+    # scalar -- but parse_multi_option_numeric CAN resolve it into three real
+    # stocked-size options, so it becomes a reported variant_candidate, not a
+    # silent guess and not a silently-dropped needs_input either. A companion
+    # "Manufacturer" -> "Brand" alias (no guard, non-numeric target) populates
+    # in the SAME call, proving resolution genuinely ran for this evidence set.
     schema = _schema(["Floor & Wall Finishes", "Edge Trim"], [
         ("Size", True, "numeric"),
         ("Brand", True, "string"),
@@ -72,8 +75,9 @@ def test_aliased_multi_option_numeric_value_stays_needs_input_via_new_gate_not_n
     by = _by_name(result)
     assert by["Brand"].status == "populated"
     assert by["Brand"].value == "TBK Metal"  # proves resolve_field ran in this call
-    assert by["Size"].status == "needs_input"
+    assert by["Size"].status == "variant_candidate"
     assert by["Size"].value is None
+    assert by["Size"].candidates == ["8.0 mm", "10.0 mm", "12.0 mm"]
 
 
 def test_aliased_multi_axis_value_still_rejected_by_the_pre_existing_guard():
@@ -100,14 +104,14 @@ def test_direct_match_clean_single_value_still_populates():
     assert by["Length"].value == "2.5 m"
 
 
-def test_direct_match_multi_option_value_now_also_rejected_by_the_gate():
+def test_direct_match_multi_option_value_also_becomes_variant_candidate():
     # A DIRECT name match (no aliasing involved) to a NUMERIC field is no
-    # longer exempt: whether a value is one confirmed number doesn't depend on
-    # how its field name was matched, so a direct-match multi-option spec is
-    # rejected exactly like an aliased one would be.
+    # different: whether a value is one confirmed number, or a real
+    # multi-option list, doesn't depend on how its field name was matched.
     schema = _schema(["Floor & Wall Finishes", "Edge Trim"], [("Length", True, "numeric")])
     result = populate_from_evidence(_ev({"Length": "2.4/2.5/2.7/3 Meters"}), schema)
 
     by = _by_name(result)
-    assert by["Length"].status == "needs_input"
+    assert by["Length"].status == "variant_candidate"
     assert by["Length"].value is None
+    assert by["Length"].candidates == ["2.4 Meters", "2.5 Meters", "2.7 Meters", "3.0 Meters"]

@@ -120,6 +120,39 @@ def normalize_value(raw_value) -> tuple[object, str | None, float]:
     return raw, None, HIGH
 
 
+_MULTI_OPTION_RE = re.compile(
+    r"(?i)^\s*((?:[0-9][0-9.,]*\s*/\s*)+[0-9][0-9.,]*)\s*(" + _UNIT_PATTERN + r")\s*"
+    r"(?:/\s*custom\w*\.?)?\s*$"
+)
+
+
+def parse_multi_option_numeric(raw_value) -> list[str] | None:
+    """If raw_value is a "/"-separated list of numbers sharing one trailing
+    unit -- a real, recurring supplier pattern for stocked size options, e.g.
+    "2.4/2.5/2.7/3 Meters" or "8/10/12 mm / Customizable" -- return each
+    option as its own "<value> <unit>" string (e.g. ["2.4 Meters", "2.5
+    Meters", ...]), each individually a normal single confirmed measurement.
+    A trailing "/ Customized" or "/ Customizable" note (not a numeric option)
+    is recognized and dropped. Returns None if the pattern doesn't match, or
+    if any option fails to parse cleanly -- never a partial or guessed list.
+    """
+    raw = str(raw_value or "").strip()
+    m = _MULTI_OPTION_RE.match(raw)
+    if not m:
+        return None
+    options = [p.strip() for p in m.group(1).split("/") if p.strip()]
+    if len(options) < 2:
+        return None
+    unit = m.group(2).strip()
+    results: list[str] = []
+    for opt in options:
+        value, ambiguous = _parse_number(opt)
+        if value is None or ambiguous:
+            return None  # any unparseable option -> refuse the whole list
+        results.append(f"{_fmt(value)} {unit}")
+    return results
+
+
 def convert_from_mm(value_mm: float, target_unit: str) -> float | None:
     """Convert a canonical-mm value into target_unit. Returns None for an
     unrecognized unit — never guesses a conversion factor. Used by

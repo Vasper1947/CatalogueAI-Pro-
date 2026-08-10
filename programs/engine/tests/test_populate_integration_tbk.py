@@ -107,28 +107,30 @@ def test_full_pipeline_populated_count_reported_honestly():
     # genuinely contains THREE real vocabulary terms as whole words (Silver,
     # Gold, Black) -- a real, honest ambiguity, not a bug -- so it becomes a
     # variant_candidate rather than an arbitrarily-picked populated value.
-    # Length and Size both stay needs_input for the SAME real reason: neither
-    # "2.4/2.5/2.7/3 Meters" (Length, a direct match) nor "8/10/12mm /
-    # Customized." (Size, via the Height alias) resolves to one specific
-    # measurement (see populate.py's _is_confirmed_numeric).
+    # Length and Size are ALSO real variant_candidates now: "2.4/2.5/2.7/3
+    # Meters" (Length, a direct match) and "8/10/12mm / Customized." (Size,
+    # via the Height alias) both resolve via
+    # common.units.parse_multi_option_numeric into real stocked-size options
+    # -- real signal, never a guessed single measurement.
     assert by["Material"].status == "populated"
     assert by["Material"].value == "Aluminum"
     assert by["Material"].reason == "whole_word_containment"
     assert by["Color"].status == "variant_candidate"
     assert by["Color"].value is None
     assert set(by["Color"].candidates) == {"Silver", "Gold", "Black"}
-    assert by["Length"].status == "needs_input"  # direct match, but not one confirmed number
-    assert by["Length"].reason == "not_one_confirmed_number"
-    assert by["Length"].value is None
-    assert by["Size"].status == "needs_input"  # aliased, and also not one confirmed number
-    assert by["Size"].reason == "not_one_confirmed_number"
-    assert by["Size"].value is None
+    assert by["Length"].status == "variant_candidate"
+    assert by["Length"].reason == "multi_option_numeric"
+    assert by["Length"].candidates == ["2.4 Meters", "2.5 Meters", "2.7 Meters", "3.0 Meters"]
+    assert by["Size"].status == "variant_candidate"
+    assert by["Size"].reason == "multi_option_numeric"
+    assert by["Size"].candidates == ["8.0 mm", "10.0 mm", "12.0 mm"]
 
     assert result.populated_count == 1
     # Genuinely incomplete for real reasons: Brand was never stated on the
-    # page (no name/description JSON-LD, no Brand vocabulary hit), Color is a
-    # real, unresolved variant ambiguity, and Length/Size/Size Unit/Length
-    # Unit/Selling Unit/Quantity per Selling Unit have no usable evidence.
+    # page (no name/description JSON-LD, no Brand vocabulary hit), and
+    # Color/Length/Size are real, unresolved variant ambiguities (never
+    # silently picked), and Size Unit/Length Unit/Selling Unit/Quantity per
+    # Selling Unit have no usable evidence at all.
     assert result.status == "incomplete"
     assert set(result.missing_required) == {
         "Brand", "Color", "Length", "Size", "Size Unit", "Length Unit",

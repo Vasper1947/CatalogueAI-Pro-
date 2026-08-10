@@ -1,6 +1,6 @@
 """Unit-normalization tests: conversions, decimals, dimensions, ambiguity."""
 
-from common.units import convert_from_mm, normalize_value
+from common.units import convert_from_mm, normalize_value, parse_multi_option_numeric
 
 
 def test_mm_value_normalizes_confidently():
@@ -63,3 +63,37 @@ def test_convert_from_mm_to_itself_is_unchanged():
 
 def test_convert_from_mm_unrecognized_unit_returns_none():
     assert convert_from_mm(2500.0, "furlong") is None
+
+
+def test_parse_multi_option_numeric_real_supplier_pattern():
+    assert parse_multi_option_numeric("2.4/2.5/2.7/3 Meters") == [
+        "2.4 Meters", "2.5 Meters", "2.7 Meters", "3.0 Meters",
+    ]
+
+
+def test_parse_multi_option_numeric_drops_trailing_customizable_note():
+    assert parse_multi_option_numeric("8/10/12 mm / Customizable") == ["8.0 mm", "10.0 mm", "12.0 mm"]
+
+
+def test_parse_multi_option_numeric_each_option_reparses_as_confirmed():
+    for opt in parse_multi_option_numeric("6/8/10/15/20mm / Customized"):
+        value, unit, confidence = normalize_value(opt)
+        assert unit is not None and not isinstance(value, list)
+        assert confidence >= 0.5
+
+
+def test_parse_multi_option_numeric_single_value_returns_none():
+    assert parse_multi_option_numeric("10 mm") is None
+
+
+def test_parse_multi_option_numeric_dimension_returns_none():
+    assert parse_multi_option_numeric("300 x 600 mm") is None
+
+
+def test_parse_multi_option_numeric_non_numeric_list_returns_none():
+    assert parse_multi_option_numeric("304, 316 Stainless Steel") is None
+
+
+def test_parse_multi_option_numeric_empty_returns_none():
+    assert parse_multi_option_numeric("") is None
+    assert parse_multi_option_numeric(None) is None

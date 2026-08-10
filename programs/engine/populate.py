@@ -45,7 +45,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from common.units import normalize_value
+from common.units import normalize_value, parse_multi_option_numeric
 from schemas.aliases import resolve_field
 from schemas.vocabulary import find_whole_word_matches, match_to_vocabulary
 
@@ -164,20 +164,35 @@ def populate_from_evidence(bkpack_evidence, schema) -> PopulationResult:
             continue
 
         if f.get("type") == "numeric":
-            if not _is_confirmed_numeric(raw_value):
+            if _is_confirmed_numeric(raw_value):
+                results.append(
+                    FieldResult(name=name, required=required, status="populated", value=raw_value)
+                )
+                populated += 1
+                continue
+            multi_options = parse_multi_option_numeric(raw_value)
+            if multi_options:
+                # A real, recurring supplier pattern (e.g. "2.4/2.5/2.7/3
+                # Meters") -- real signal, one listing, N stocked sizes, same
+                # discipline as a multi-option dropdown value: never resolved
+                # by picking one.
                 results.append(
                     FieldResult(
-                        name=name, required=required, status="needs_input",
-                        reason="not_one_confirmed_number",
+                        name=name, required=required, status="variant_candidate",
+                        reason="multi_option_numeric", candidates=multi_options,
                     )
                 )
                 if required:
                     missing_required.append(name)
                 continue
             results.append(
-                FieldResult(name=name, required=required, status="populated", value=raw_value)
+                FieldResult(
+                    name=name, required=required, status="needs_input",
+                    reason="not_one_confirmed_number",
+                )
             )
-            populated += 1
+            if required:
+                missing_required.append(name)
             continue
 
         if f.get("type") == "dropdown" and f.get("vocabulary"):
