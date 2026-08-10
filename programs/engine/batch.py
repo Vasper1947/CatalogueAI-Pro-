@@ -14,6 +14,7 @@ from pathlib import Path
 
 from engine.detect import match_template
 from engine.populate import populate_from_evidence
+from engine.variants import VariantExpansion, expand_variants
 from engine.writer import RowWriteResult, WriteVerificationError, write_template_batch
 
 # Fallback only for the pathological case of a schema whose Instructions
@@ -54,6 +55,9 @@ class BatchRunSummary:
     category_ambiguous: list[RecordOutcome] = field(default_factory=list)
     written_files: list[WrittenFile] = field(default_factory=list)
     write_failures: list[WriteFailure] = field(default_factory=list)
+    # One entry per matched record that actually had a variant field expanded
+    # (see engine.variants.expand_variants) -- empty unless expand_variants=True.
+    variant_expansions: list[VariantExpansion] = field(default_factory=list)
 
 
 def _slug(text: str) -> str:
@@ -77,6 +81,7 @@ def run_batch(
     *,
     base_filename: str = "products",
     forced_schema: dict | None = None,
+    expand_variants_flag: bool = False,
 ) -> BatchRunSummary:
     """records: [(record_id, evidence_rows_as_dicts), ...] -- typically one
     entry per staged product (see export.staging.load_staged_evidence_rows).
@@ -102,6 +107,14 @@ def run_batch(
     chunk. A chunk whose mandatory self-verification fails is recorded in
     write_failures rather than raising past the whole batch run -- one bad
     chunk must not lose every other already-verified file.
+
+    ``expand_variants_flag``, when True, runs each matched record's
+    PopulationResult through engine.variants.expand_variants before grouping:
+    a record with a real multi-option field (e.g. "Color: Silver/Golden/
+    Bronze") becomes N rows, one real option per row, instead of one row with
+    that field left an unresolved variant_candidate. Off by default -- this
+    changes row counts, so it is an explicit, human-controlled decision, not
+    an automatic behavior change.
     """
     summary = BatchRunSummary(total_records=len(records))
     groups: dict[tuple, list[tuple[str, object]]] = {}
@@ -143,7 +156,16 @@ def run_batch(
         key = tuple(category_path)
         schema_by_path[key] = best
         population = populate_from_evidence(evidence, best)
-        groups.setdefault(key, []).append((record_id, population))
+
+        if expand_variants_flag:
+            population_rows, expansion = expand_variants(record_id, population)
+            if expansion.expanded_field is not None:
+                summary.variant_expansions.append(expansion)
+        else:
+            population_rows = [population]
+
+        for pop in population_rows:
+            groups.setdefault(key, []).append((record_id, pop))
 
     output_dir = Path(output_dir)
     for key, entries in groups.items():

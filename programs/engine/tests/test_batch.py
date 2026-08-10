@@ -120,6 +120,51 @@ def test_output_files_are_real_and_readable(tmp_path):
     assert ws.cell(row=4, column=1).value == "Zeta"
 
 
+def test_expand_variants_flag_off_by_default_leaves_variant_candidate_unexpanded(tmp_path):
+    schema = _schema(["Cat", "Widget"])
+    records = [("p1", _ev(brand="Acme/Zeta"))]  # 2 real whole-word matches -> variant_candidate
+
+    summary = run_batch(records, [schema], tmp_path)
+
+    assert len(summary.matched) == 1
+    assert summary.variant_expansions == []
+    wf = summary.written_files[0]
+    assert len(wf.row_results) == 1  # not expanded -- one unresolved row
+    assert "Brand" in wf.row_results[0].blank_variant_candidate
+
+
+def test_expand_variants_flag_on_expands_into_real_rows(tmp_path):
+    schema = _schema(["Cat", "Widget"])
+    records = [("p1", _ev(brand="Acme/Zeta"))]
+
+    summary = run_batch(records, [schema], tmp_path, expand_variants_flag=True)
+
+    assert len(summary.matched) == 1
+    assert len(summary.variant_expansions) == 1
+    assert summary.variant_expansions[0].record_id == "p1"
+    assert summary.variant_expansions[0].expanded_field == "Brand"
+    assert summary.variant_expansions[0].option_count == 2
+    wf = summary.written_files[0]
+    assert len(wf.row_results) == 2  # one real row per option
+    assert wf.record_ids == ["p1", "p1"]  # both rows trace back to the same source record
+    assert all("Brand" in r.written_fields for r in wf.row_results)  # written, not blank
+
+    import openpyxl
+    wb = openpyxl.load_workbook(wf.output_path, data_only=True)
+    ws = wb["Template"]
+    assert {ws.cell(row=3, column=1).value, ws.cell(row=4, column=1).value} == {"Acme", "Zeta"}
+
+
+def test_expand_variants_records_with_no_variant_fields_are_not_reported(tmp_path):
+    schema = _schema(["Cat", "Widget"])
+    records = [("p1", _ev())]  # clean single "Acme" value -- nothing to expand
+
+    summary = run_batch(records, [schema], tmp_path, expand_variants_flag=True)
+
+    assert summary.variant_expansions == []
+    assert len(summary.written_files[0].row_results) == 1
+
+
 def test_empty_records_list_produces_empty_summary(tmp_path):
     schema = _schema(["Cat", "Widget"])
     summary = run_batch([], [schema], tmp_path)

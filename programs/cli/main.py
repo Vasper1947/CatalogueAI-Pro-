@@ -92,6 +92,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "already know the category and detection can't confidently decide."
         ),
     )
+    parser.add_argument(
+        "--expand-variants", action="store_true",
+        help=(
+            "Expand a record's single largest multi-option field (e.g. "
+            '"Color: Silver/Golden/Bronze") into one real row per option, '
+            "instead of leaving it an unresolved variant_candidate. Off by "
+            "default -- this changes row counts, so it is opt-in."
+        ),
+    )
     return parser
 
 
@@ -249,7 +258,8 @@ def run(args: argparse.Namespace) -> RunResult:
     forced_schema = _resolve_category_override(args.category_override) if args.category_override else None
     schemas = [forced_schema] if forced_schema is not None else load_schemas()
     summary = run_batch(
-        records, schemas, xlsx_dir, base_filename=_slug(args.url), forced_schema=forced_schema
+        records, schemas, xlsx_dir, base_filename=_slug(args.url), forced_schema=forced_schema,
+        expand_variants_flag=args.expand_variants,
     )
     result.batch_summary = summary
 
@@ -287,6 +297,11 @@ def _print_final_summary(result: RunResult) -> None:
         print(f"  category_ambiguous: {len(s.category_ambiguous)}")
         print(f"  xlsx files written: {len(s.written_files)}")
         print(f"  write failures   : {len(s.write_failures)}")
+        if s.variant_expansions:
+            print(f"  variant expansions: {len(s.variant_expansions)}")
+            for ve in s.variant_expansions:
+                note = f" (also flagged: {ve.other_variant_fields})" if ve.other_variant_fields else ""
+                print(f"    {ve.record_id}: {ve.expanded_field} x{ve.option_count}{note}")
     for pkg in result.packages:
         print(f"  package -> {pkg.output_path}")
         if pkg.missing_media:
@@ -347,6 +362,10 @@ def _write_report(result: RunResult, out_dir: Path) -> Path:
         lines.append(f"write_failures: {len(s.write_failures)}")
         for wfail in s.write_failures:
             lines.append(f"  {wfail.category_path}: {wfail.error}")
+        lines.append(f"variant_expansions: {len(s.variant_expansions)}")
+        for ve in s.variant_expansions:
+            note = f", also flagged: {ve.other_variant_fields}" if ve.other_variant_fields else ""
+            lines.append(f"  {ve.record_id}: expanded {ve.expanded_field} x{ve.option_count}{note}")
         lines.append("")
 
         for wf in s.written_files:
