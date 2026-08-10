@@ -124,6 +124,85 @@ worker) → Program 3 (engine) → Program 2 (field app).
   Metal Edge Trim fixture (`detect.py` → `populate.py` → `write_template`) —
   see the session report for the exact, honest produced-file contents.
 
+- **`packages/schemas/vocabulary.py`**: `match_to_vocabulary(raw_value, vocabulary)`
+  — deterministic, strictest-first dropdown-value matching (exact →
+  case-insensitive → normalized punctuation/whitespace + a small explicit
+  British/American spelling equivalence list → whole-word containment),
+  stopping at the first level with exactly one hit; 2+ hits at one level is a
+  reported ambiguity, never resolved by falling through. No fuzzy/edit-
+  distance/embedding matching anywhere.
+- **`programs/engine/populate.py`** wired to `match_to_vocabulary`: a dropdown
+  field's accepted value now resolves to the CANONICAL vocabulary term (never
+  the raw string), with `FieldResult.reason` recording the method. No match
+  distinguishes `"no_evidence"` from `"not_in_vocabulary"` — different
+  problems, no longer indistinguishable downstream. A value containing 2+ real
+  vocabulary terms (e.g. a real "Aluminium, Stainless Steel" listing) becomes
+  `status="variant_candidate"`, listing every match in `.candidates` — never
+  resolved by picking one. This corrected a real gap the prior round's TBK
+  test surfaced (a value like "Aluminum Alloy" used to populate verbatim, only
+  caught later — and left blank — by `write_template`'s own separate check).
+- **`programs/engine/writer.py`** generalized to `write_template_batch`: N
+  populated records → one `.xlsx`, N data rows, one shared set of headers/
+  validations/protection, self-verification extended to check every row.
+  `write_template()` is now a thin single-record wrapper (100%
+  behavior-compatible). Added a `blank_variant_candidate` bucket alongside the
+  existing blank-reason buckets.
+- **`programs/engine/batch.py`** (new): `run_batch()` runs detect + populate
+  per staged record, groups matched records by detected `category_path` (one
+  schema = one file), splits each group to at most that schema's real
+  `row_limit` (falls back to 500 only if genuinely unstated), and writes one
+  `.xlsx` per chunk. No-template-match and genuinely-ambiguous records are
+  reported in the summary, excluded from every written file — never dropped,
+  never guessed into a category. A `forced_schema` parameter supports a
+  human's explicit category override. A chunk whose self-verification fails
+  is recorded in `write_failures`, not raised past the whole run.
+- **`packages/export/upload.py`** (new): `package_for_upload(xlsx_path,
+  media_files, output_zip)` builds the exact ZIP shape a real template's own
+  Instructions sheet specifies (xlsx at root + a `media/` folder — re-read
+  from a real parsed schema, not a summary of it). Re-parses the xlsx with
+  the real, locked parser to find every Media-section column's real filename
+  references across every row, and reports `missing_media` (referenced, not
+  supplied) / `unreferenced_media` (supplied, not referenced) — verified
+  programmatically, never assumed. A direct-URL media value (the template's
+  own stated alternative to a local file) is correctly never flagged missing.
+- **`programs/cli/main.py`** (new): one command, a product or category URL in,
+  an upload-ready ZIP out — `discover → scrape → stage → images/CSV → detect
+  → populate → write xlsx → package`. Invocation:
+  `python -m cli.main <url> [--out DIR] [--limit N] [--category-override "A > B > C"]`.
+  Category-page candidates are discovered via same-domain on-page links
+  (`scraper.discover.discover_links`); which candidates are real products is
+  decided the same way the rest of this project decides everything — real
+  extracted evidence, never a guessed URL pattern. Added
+  `scraper.discover.fetch_html`/`fetch_bytes` (plain HTTP GET — this
+  session's own real-page testing found it more reliable than Playwright
+  navigation under this environment's network conditions; see Blocked).
+  Prints one progress line per candidate and a final summary, and always
+  writes a human-readable run report file into `--out`.
+- **Real, honest multi-product proof (Task 7)** — see the session report for
+  full numbers; summary: TBK Metal's real `/products/` listing (40 real
+  links) yielded 15 real captures and **0 detections** — a genuine catalog-
+  coverage gap (TBK's core line is architectural/decorative metal sheet
+  fabrication, which has no corresponding category anywhere in BK's 510-
+  schema store). A second real run against 27 real TBK tile-trim product
+  pages (discovered via TBK's real `sitemap.xml`, since no single on-page hub
+  links this specific product cluster) captured 27/27 and, using
+  `--category-override` on the real, documented Edge-Trims-family sibling-tie
+  ambiguity (21/27 landed in `category_ambiguous` under plain auto-detection —
+  the same known limitation already listed below), produced ONE real,
+  self-verified 27-row `.xlsx`. Material populated 23/27 (85%) via real
+  vocabulary matching — up from the prior round's 0% on the same field —
+  and Color correctly reported 22/27 as a genuine `variant_candidate`
+  (real multi-material/multi-shape listings), never guessed. Every other
+  column stayed honestly blank (Brand/SKU/etc. simply never stated on these
+  pages; Length/Size failed the pre-existing "one confirmed number" gate on
+  genuine multi-option values). 0 images captured — a real, disclosed gap
+  (see Next Up). Verdict: the produced ZIP is **not** genuinely uploadable to
+  BK as-is — every row is missing required fields (Brand always; Length/Size/
+  their units usually) and carries no product photos; a human still has to
+  fill those in (plus Floor Price, always manual by design) before upload.
+- Coverage at this session's end: **77.11% total** (`COVERAGE_FLOOR` left at
+  76 — unchanged, never lowered; the real total only moved up this session).
+
 ### Domain knowledge — confirmed vs pending
 
 | Category | Status |
@@ -144,12 +223,19 @@ not an oversight).
 
 ## In Progress
 
-Nothing mid-flight at session end — everything started this session (checkpoint
-tooling, media discovery/snapshot, the Excel writer) landed and is covered
-above under Done.
+Nothing mid-flight at session end — everything started this session (value
+vocabulary matching, batch processing, upload packaging, the CLI, and the
+real multi-product proof run) landed and is covered above under Done.
 
 ## Next Up
 
+- **The CLI only captures a product image from JSON-LD's `image` field** —
+  real, disclosed gap found during Task 7's run: TBK's tile-trim pages have
+  no JSON-LD at all (spec-table-only, the same real shape documented in
+  earlier rounds), so 0 images were captured across all 27 real products even
+  though the pages have real photos in plain `<img>` tags. A raw `<img>`-tag
+  fallback (same "no evidence, no value" discipline — only when a real image
+  URL is actually present, never guessed) would close this.
 - Confirm or reject the 2 `pending_review` categories (Edge Trims & Profiles,
   PVC pipe) — user decision, not engineering work.
 - Research domain knowledge for more of the remaining ~504 categories,
@@ -158,28 +244,19 @@ above under Done.
   why, and CLAUDE.md's build-order note that Program 3 work (now underway)
   was itself gated on real BK Excel templates being confirmed available
   (they are — 510 real templates are parsed and in `packages/schemas/data`).
-- Extend the sibling-tie-break mechanism beyond numeric sizes (it currently
-  only resolves ties like "8mm vs 10mm vs 12mm"; a tie among shape-named
-  siblings with no numeric distinguishing content, and no content-matchable
-  word in evidence either, still reports `category_ambiguous` — correct, but
-  leaves real products unresolved that a human could resolve in seconds).
+- **Extend the sibling-tie-break mechanism beyond numeric sizes** (it
+  currently only resolves ties like "8mm vs 10mm vs 12mm"; a tie among
+  shape-named siblings with no numeric distinguishing content, and no
+  content-matchable word in evidence either, still reports
+  `category_ambiguous` — correct, never a silent pick, but leaves real
+  products unresolved that a human could sort in seconds). Confirmed at real
+  scale this session: 21 of 27 real TBK tile-trim products landed in
+  `category_ambiguous` among the Edge Trims & Profiles family under plain
+  auto-detection (`--category-override` is today's real, working workaround).
 - The `detect.py` / `populate.py` alias-resolution asymmetry is intentional
   and documented in both modules' docstrings — not a gap, but worth revisiting
   if a future category's aliasing needs turn out more complex than TMT/Edge
   Trims/PVC/GI have required so far.
-- **A real finding from `write_template`'s TBK end-to-end test, worth
-  revisiting**: `populate.py` has no vocabulary check at all for non-numeric
-  fields, so it happily "populates" a dropdown field with a raw scraped value
-  that doesn't match the schema's controlled vocabulary (e.g. TBK's real
-  "Aluminum Alloy" vs. Edge Trim's real `["Aluminum", "Stainless Steel",
-  "PVC", "Brass", "Chrome"]`). `write_template`'s stricter, vocabulary-bound
-  check correctly refuses to write it — but the net real-world result for
-  this actual page is a written file with **zero** populated fields, because
-  every dropdown value TBK states misses its controlled vocabulary exactly.
-  A category-aware, value-guarded matching layer for dropdown values (the
-  same discipline `schemas/aliases.py` already applies to field *names*, not
-  raw fuzzy matching) could recover cases like this — not built this session,
-  scope was Task 5's writer only.
 
 ## Blocked
 
