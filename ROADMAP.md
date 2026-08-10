@@ -200,8 +200,83 @@ worker) → Program 3 (engine) → Program 2 (field app).
   BK as-is — every row is missing required fields (Brand always; Length/Size/
   their units usually) and carries no product photos; a human still has to
   fill those in (plus Floor Price, always manual by design) before upload.
-- Coverage at this session's end: **77.11% total** (`COVERAGE_FLOOR` left at
-  76 — unchanged, never lowered; the real total only moved up this session).
+- Coverage at end of that session: **77.11% total** (`COVERAGE_FLOOR` left at
+  76 — unchanged, never lowered; the real total only moved up).
+
+- **Root-cause fix: page-metadata extraction** (`programs/scraper/discover.py`):
+  `extract_page_metadata(page_html, base_url)` reads whatever of
+  `og:title`/`og:image`/`og:description`/`twitter:image`/`<title>`/`<h1>`/meta
+  description is actually present — absent tags simply absent, never
+  invented, image URLs resolved to absolute. `metadata_to_fields()` reduces
+  it to the same `{name, description, image}` shape JSON-LD's own fields use
+  (og:title > h1 > title; og:description > meta description; og:image >
+  twitter:image). `extract_gallery_images()` is a third-tier, structural-only
+  `<img>` scan (inside a product/gallery-classed container, excluding
+  logo/icon/sprite filenames and HTML-stated small dimensions — no
+  site-specific selectors). `resolve_product_image()` cascades
+  JSON-LD → metadata → gallery scan.
+- **Wired into evidence, images, and classification**
+  (`programs/scraper/assemble.py`): `build_pack_from_fields` now fills
+  name/description from page metadata (`metadata_fallback_rows`,
+  `CONFIDENCE_LOOSE = 0.6` — the existing "looser, non-structured fallback"
+  tier this module already reserved but had never actually used) ONLY when
+  JSON-LD provided neither, and ONLY as an *enrichment* of a page that
+  already qualifies via JSON-LD or a real spec table — metadata alone can
+  never open the "is this capturable" gate (SEO tags exist on almost every
+  real page, product or not; without this guard a blog/about page would get
+  "captured" off its own `<title>` tag). The merged name/description also
+  feeds `classify_category` and `detect.py`'s content tie-break, and
+  `cli.main.capture_products` now resolves the product image via
+  `resolve_product_image` instead of a raw JSON-LD-only field.
+- **Task 4's real re-run — identical 27 tile-trim products, before/after**:
+  captured 27/27 (unchanged); auto-detected **1/27 → 14/27**;
+  still-`category_ambiguous` **21/27 → 9/27**; images captured **0/27 →
+  27/27**; Description **0% → 100%** (new field, from metadata); Brand
+  **0% → 11%** (3/27) — but flagged honestly: all 3 are a real instance of
+  `assemble.py`'s own pre-documented "generic vocabulary word" caveat
+  (`match_brand_from_vocabulary`'s docstring already warned a common word can
+  false-positive) — TBK's own `<title>` boilerplate "... | TBK Metal -
+  Manufacturer in **China**" whole-word-matched the schema's Brand vocabulary
+  entry "china", not a genuine brand. Not a new bug; metadata just gave the
+  existing risk more text to search. Material stayed 85% (unaffected,
+  unrelated mechanism, as expected).
+- **Variant expansion** (`programs/engine/variants.py`, new):
+  `expand_variants(record_id, population)` turns one record with a real
+  multi-option field (e.g. "Length: 2.4/2.5/2.7/3 Meters") into N real rows,
+  one option per row — BK's own stated convention (duplicate the row, vary
+  the variant-specific field). Only the LARGEST `variant_candidate` axis
+  expands per record even when several fields are multi-option
+  simultaneously (the real, common case: most of the 27 tile-trim products
+  have Color AND Length AND/OR Size all multi-option at once) — expanding
+  more than one axis would fabricate combinations the supplier never stated
+  together; the other axis stays flagged, not silently resolved. Every
+  expanded row stays fully traceable to its source record. Needed a new
+  numeric-side counterpart first: `common/units.py`'s
+  `parse_multi_option_numeric` resolves a real "/"-separated stocked-size
+  list into individually-valid measurements — `populate.py`'s numeric branch
+  now reports these as `variant_candidate` too (previously only dropdown
+  fields got that status; a numeric multi-option value like "8/10/12mm" used
+  to be flatly rejected as `needs_input`). `engine.batch.run_batch
+  (expand_variants_flag=True)` and the CLI's `--expand-variants` flag are
+  opt-in (row-count-changing, so a human-controlled decision, not automatic).
+- **Task 6 — final real run, with variant expansion**: the same 27 real
+  products, `--category-override` (Edge Trim) + `--expand-variants` →
+  **106 real rows** (27 source products), one self-verified `.xlsx`, packaged
+  into an upload-ready ZIP with all 27 real product photos included. Length
+  filled **79%** (84/106, via real expansion), Size **18%** (19/106 — lower
+  because Size lost the "largest axis" contest to Length on most products, so
+  stayed a flagged `variant_candidate` instead), Material **88%**, Description
+  **100%**, Brand **11%** (same "china" caveat as above). Verdict: **still not
+  genuinely upload-ready as-is** — Brand, SKU, pricing/inventory, shipping,
+  and media-column fields remain blank for real, disclosed reasons (see the
+  session report), and the 27 real captured photos, while genuinely inside
+  the ZIP's `media/` folder, aren't yet cross-referenced by filename in the
+  sheet's own Cover Image/Other Images columns (same disclosed gap as before
+  — populate.py was never asked to wire local capture filenames back into
+  those columns).
+- Coverage at this session's end: **78.13% total**, `327 passed`
+  (`COVERAGE_FLOOR` still 76 in `scripts/check.py` — never lowered; the real
+  total only moved up across every commit this session).
 
 ### Domain knowledge — confirmed vs pending
 
@@ -223,19 +298,30 @@ not an oversight).
 
 ## In Progress
 
-Nothing mid-flight at session end — everything started this session (value
-vocabulary matching, batch processing, upload packaging, the CLI, and the
-real multi-product proof run) landed and is covered above under Done.
+Nothing mid-flight at session end — everything started this session (page
+metadata extraction, its wiring into evidence/images/classification, the
+Task 4 re-run, variant expansion, and the Task 6 final run) landed and is
+covered above under Done.
 
 ## Next Up
 
-- **The CLI only captures a product image from JSON-LD's `image` field** —
-  real, disclosed gap found during Task 7's run: TBK's tile-trim pages have
-  no JSON-LD at all (spec-table-only, the same real shape documented in
-  earlier rounds), so 0 images were captured across all 27 real products even
-  though the pages have real photos in plain `<img>` tags. A raw `<img>`-tag
-  fallback (same "no evidence, no value" discipline — only when a real image
-  URL is actually present, never guessed) would close this.
+- **Media-column cross-referencing**: 27/27 real product photos are now
+  captured, WebP-processed, and included in the upload ZIP's `media/` folder
+  (see Task 6) — but the sheet's own Cover Image/Other Images columns aren't
+  wired to reference those local filenames, so `package_for_upload` correctly
+  (and honestly) reports every one of them as `unreferenced_media`. Real,
+  disclosed, not silently fixed nor silently ignored — populating those
+  columns with the real local capture filename (not the original scraped
+  source URL) is the next real step toward a genuinely upload-ready file.
+- **`match_brand_from_vocabulary`'s pre-documented "generic vocabulary word"
+  risk manifested for real this session**: 3 of 27 real Brand "hits" this
+  session were TBK's own `<title>` boilerplate ("... Manufacturer in
+  **China**") whole-word-matching the Brand vocabulary entry "china", not a
+  genuine brand. The function's own docstring already flagged this exact risk
+  as a vocabulary-quality issue, not a bug in the matching rule — worth a
+  real look at whether a category's own Brand vocabulary should exclude
+  bare country/generic-noun entries, now that there's a real, concrete
+  instance to reason from instead of a hypothetical one.
 - Confirm or reject the 2 `pending_review` categories (Edge Trims & Profiles,
   PVC pipe) — user decision, not engineering work.
 - Research domain knowledge for more of the remaining ~504 categories,
@@ -244,15 +330,16 @@ real multi-product proof run) landed and is covered above under Done.
   why, and CLAUDE.md's build-order note that Program 3 work (now underway)
   was itself gated on real BK Excel templates being confirmed available
   (they are — 510 real templates are parsed and in `packages/schemas/data`).
-- **Extend the sibling-tie-break mechanism beyond numeric sizes** (it
-  currently only resolves ties like "8mm vs 10mm vs 12mm"; a tie among
-  shape-named siblings with no numeric distinguishing content, and no
-  content-matchable word in evidence either, still reports
-  `category_ambiguous` — correct, never a silent pick, but leaves real
-  products unresolved that a human could sort in seconds). Confirmed at real
-  scale this session: 21 of 27 real TBK tile-trim products landed in
-  `category_ambiguous` among the Edge Trims & Profiles family under plain
-  auto-detection (`--category-override` is today's real, working workaround).
+- **Extend the sibling-tie-break mechanism beyond numeric sizes**: real,
+  substantial progress this session (page-metadata text now feeds the
+  content tie-break — see Done), but not solved. Confirmed at real scale:
+  `category_ambiguous` among the Edge Trims & Profiles family dropped from
+  21/27 to **9/27** real TBK tile-trim products once real page-title/
+  description text became searchable, but 9 remain genuinely unresolved
+  because their distinguishing words still don't land where the tie-break
+  looks (`--category-override` remains the real, working workaround for
+  those). Reported honestly, per the task's own framing, rather than
+  overstating the improvement.
 - The `detect.py` / `populate.py` alias-resolution asymmetry is intentional
   and documented in both modules' docstrings — not a gap, but worth revisiting
   if a future category's aliasing needs turn out more complex than TMT/Edge
@@ -315,7 +402,7 @@ real multi-product proof run) landed and is covered above under Done.
   exclusion beyond the `Pricing & Inventory` section (Shipping/Media/Meta/
   Identity & Naming sections were explicitly left as an open question, not
   assumed to behave the same way, when the recall gate was built).
-- A page-title/meta-description fallback for `classify_category` when a page
-  has no JSON-LD `name`/`description` at all (noted, not built, when
-  `build_pack_from_fields`'s evidence-capture gate was fixed — that fix was
-  scoped to evidence capture only, not classification coverage).
+
+(The page-title/meta-description fallback for `classify_category` that was
+deferred here in an earlier round is now DONE — see page-metadata extraction
+under Done above.)
